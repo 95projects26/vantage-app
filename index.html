@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vantage — AI Visibility</title>
+<style>
+  :root{
+    --bg:#EBEEF4; --panel:#FFFFFF; --panel-2:#F5F7FB; --border:#E0E5EE;
+    --text:#141A26; --muted:#5E6880; --faint:#8A93A6;
+    --accent:#4E5FE0; --accent-weak:rgba(78,95,224,.11); --accent-line:rgba(78,95,224,.28);
+    --pos:#1F9D6B; --pos-weak:rgba(31,157,107,.13);
+    --neu:#B7842A; --neu-weak:rgba(183,132,42,.14);
+    --neg:#CF4B44; --neg-weak:rgba(207,75,68,.13);
+    --s1:#4E5FE0; --s2:#17A79A; --s3:#D79A3C; --s4:#D2698C; --s5:#6E7A93;
+    --shadow:0 1px 2px rgba(20,26,38,.05), 0 6px 20px rgba(20,26,38,.05);
+    --font-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --r:12px;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0C111B; --panel:#151C29; --panel-2:#1B2433; --border:#293244;
+    --text:#E7ECF5; --muted:#95A0B4; --faint:#6B7589;
+    --accent:#7182F4; --accent-weak:rgba(113,130,244,.16); --accent-line:rgba(113,130,244,.36);
+    --pos:#37B98A; --pos-weak:rgba(55,185,138,.16);
+    --neu:#D6A64B; --neu-weak:rgba(214,166,75,.15);
+    --neg:#E5675E; --neg-weak:rgba(229,103,94,.16);
+    --s1:#7182F4; --s2:#2BC0B0; --s3:#E0AE55; --s4:#E482A0; --s5:#8592AB;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+  }}
+  :root[data-theme="light"]{
+    --bg:#EBEEF4; --panel:#FFFFFF; --panel-2:#F5F7FB; --border:#E0E5EE;
+    --text:#141A26; --muted:#5E6880; --faint:#8A93A6;
+    --accent:#4E5FE0; --accent-weak:rgba(78,95,224,.11); --accent-line:rgba(78,95,224,.28);
+    --pos:#1F9D6B; --pos-weak:rgba(31,157,107,.13); --neu:#B7842A; --neu-weak:rgba(183,132,42,.14);
+    --neg:#CF4B44; --neg-weak:rgba(207,75,68,.13);
+    --s1:#4E5FE0; --s2:#17A79A; --s3:#D79A3C; --s4:#D2698C; --s5:#6E7A93;
+    --shadow:0 1px 2px rgba(20,26,38,.05), 0 6px 20px rgba(20,26,38,.05);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0C111B; --panel:#151C29; --panel-2:#1B2433; --border:#293244;
+    --text:#E7ECF5; --muted:#95A0B4; --faint:#6B7589;
+    --accent:#7182F4; --accent-weak:rgba(113,130,244,.16); --accent-line:rgba(113,130,244,.36);
+    --pos:#37B98A; --pos-weak:rgba(55,185,138,.16); --neu:#D6A64B; --neu-weak:rgba(214,166,75,.15);
+    --neg:#E5675E; --neg-weak:rgba(229,103,94,.16);
+    --s1:#7182F4; --s2:#2BC0B0; --s3:#E0AE55; --s4:#E482A0; --s5:#8592AB;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;line-height:1.45;font-size:14px}
+  .tnum{font-variant-numeric:tabular-nums}
+  button{font-family:inherit;cursor:pointer}
+  a{color:inherit;text-decoration:none}
+  .app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+  .side{background:var(--panel);border-right:1px solid var(--border);display:flex;
+    flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .brand{display:flex;align-items:center;gap:10px;padding:18px 18px 14px}
+  .brand .mark{width:26px;height:26px;border-radius:7px;background:var(--accent);
+    display:grid;place-items:center;color:#fff;flex:none;box-shadow:0 2px 8px var(--accent-line)}
+  .brand .mark svg{width:15px;height:15px}
+  .brand b{font-size:15px;letter-spacing:.02em}
+  .brand span{display:block;font-size:10.5px;color:var(--faint);letter-spacing:.13em;text-transform:uppercase;margin-top:1px}
+  .navsec{padding:6px 12px}
+  .navlbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);padding:12px 10px 6px}
+  .navitem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+    color:var(--muted);font-size:13.5px;font-weight:500;width:100%;border:none;background:none;text-align:left}
+  .navitem svg{width:16px;height:16px;opacity:.85;flex:none}
+  .navitem:hover{background:var(--panel-2);color:var(--text)}
+  .navitem.active{background:var(--accent-weak);color:var(--accent);font-weight:600}
+  .navitem .badge{margin-left:auto;font-size:10.5px;color:var(--faint);font-weight:500}
+  .side .who{margin-top:auto;padding:14px 16px;border-top:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+  .side .who .av{width:28px;height:28px;border-radius:50%;background:var(--accent);
+    display:grid;place-items:center;font-weight:700;color:#fff;flex:none}
+  .side .who .out{margin-left:auto;color:var(--faint);font-size:11.5px;font-weight:600;background:none;border:none}
+  .side .who .out:hover{color:var(--neg)}
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 82%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;padding:14px 26px;flex-wrap:wrap}
+  .crumb{font-size:12.5px;color:var(--faint)}
+  .crumb b{color:var(--text);font-weight:600}
+  .crumb a{cursor:pointer}
+  .h1{font-size:19px;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+  .spacer{flex:1}
+  .pill-select{display:inline-flex;align-items:center;gap:7px;background:var(--panel);
+    border:1px solid var(--border);border-radius:9px;padding:7px 11px;font-size:12.5px;color:var(--muted)}
+  .pill-select b{color:var(--text);font-weight:600}
+  .btn{display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#fff;border:none;
+    border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;box-shadow:0 2px 10px var(--accent-line)}
+  .btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--border);box-shadow:none}
+  .btn:disabled{opacity:.55;cursor:default}
+  .btn svg{width:15px;height:15px}
+  .content{padding:22px 26px 60px;max-width:1280px;width:100%}
+  .grid{display:grid;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+  .card .hd{display:flex;align-items:center;gap:10px;padding:15px 18px 0}
+  .card .hd h3{font-size:14px;font-weight:650;margin:0}
+  .card .hd p{font-size:12px;color:var(--faint);margin:2px 0 0}
+  .card .bd{padding:14px 18px 18px}
+  .eyebrow{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .tile{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);
+    padding:16px 17px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .tile .lab{font-size:11.5px;color:var(--muted);font-weight:550}
+  .tile .val{font-size:30px;font-weight:680;letter-spacing:-.02em;margin-top:9px;line-height:1}
+  .tile .sub{font-size:11.5px;color:var(--faint);margin-top:7px}
+  .tile .strip{position:absolute;left:0;top:0;bottom:0;width:3px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .chip.pos{color:var(--pos);background:var(--pos-weak)}
+  .chip.neu{color:var(--neu);background:var(--neu-weak)}
+  .chip.neg{color:var(--neg);background:var(--neg-weak)}
+  .chip.off{color:var(--faint);background:var(--panel-2)}
+  .chip.dot::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;text-align:left;padding:0 12px 9px}
+  td{padding:11px 12px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle}
+  tr td:first-child,th:first-child{padding-left:4px}
+  .rank{color:var(--faint);font-weight:600;width:26px}
+  .brandcell{display:flex;align-items:center;gap:9px;font-weight:600}
+  .lg{border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;flex:none;width:22px;height:22px}
+  tr.me td{background:var(--accent-weak)}
+  tr.me .brandcell{color:var(--accent)}
+  .bar{height:6px;border-radius:4px;background:var(--panel-2);overflow:hidden;min-width:60px}
+  .bar>i{display:block;height:100%;border-radius:4px;background:var(--accent)}
+  .modelbadge{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}
+  .modelbadge .m{width:19px;height:19px;border-radius:5px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff}
+  .ans{border:1px solid var(--border);border-radius:10px;padding:13px 14px;background:var(--panel-2);display:flex;flex-direction:column;gap:8px}
+  .ans+.ans{margin-top:10px}
+  .ans .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .ans .pr{font-weight:600;font-size:13px}
+  .ans .txt{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .ans .meta{font-size:11px;color:var(--faint);margin-left:auto}
+  .srcline{display:flex;align-items:center;gap:8px;padding:9px 4px;border-top:1px solid var(--border)}
+  .srcline:first-child{border-top:none}
+  .srcline .fav{width:20px;height:20px;border-radius:5px;background:var(--panel-2);border:1px solid var(--border);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--muted)}
+  .srcline .dom{font-size:12.5px;font-weight:550;flex:none;width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srcline .pct{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;width:44px;text-align:right}
+  .note{font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:7px;padding:9px 12px;border:1px dashed var(--border);border-radius:9px;background:var(--panel-2)}
+  .note svg{width:14px;height:14px;flex:none}
+  .clientgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .ccard{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:16px;
+    box-shadow:var(--shadow);text-align:left;width:100%;display:flex;flex-direction:column;gap:13px;transition:transform .12s,border-color .12s}
+  .ccard:hover{transform:translateY(-2px);border-color:var(--accent-line)}
+  .ccard .row1{display:flex;align-items:center;gap:11px}
+  .ccard .row1 .lg{width:38px;height:38px;border-radius:9px;font-size:14px}
+  .ccard .nm{font-weight:650;font-size:14.5px}
+  .ccard .tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;margin-top:2px;display:inline-block}
+  .ccard .stats{display:flex;gap:18px;padding-top:11px;border-top:1px solid var(--border)}
+  .ccard .stat .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+  .ccard .stat .v{font-size:17px;font-weight:680;margin-top:3px}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:2px;flex-wrap:wrap}
+  .tab{border:none;background:none;color:var(--muted);font-size:13.5px;font-weight:550;padding:10px 13px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:var(--text);border-color:var(--accent);font-weight:650}
+  .tab:hover{color:var(--text)}
+  .hide{display:none!important}
+  .promptgroup{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:650;padding:14px 4px 6px}
+  tr.clk{cursor:pointer}
+  tr.clk:hover td{background:var(--panel-2)}
+  .viewcue{font-size:11px;color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:3px}
+  .viewcue svg{width:12px;height:12px}
+  /* drawer */
+  .drawer{position:fixed;inset:0;z-index:60}
+  .drawer.hide{display:none}
+  .drawer-bg{position:absolute;inset:0;background:rgba(8,12,20,.5);backdrop-filter:blur(2px)}
+  .drawer-panel{position:absolute;top:0;right:0;height:100%;width:min(620px,94vw);background:var(--bg);
+    border-left:1px solid var(--border);box-shadow:-12px 0 40px rgba(0,0,0,.25);display:flex;flex-direction:column;animation:slidein .2s ease}
+  @keyframes slidein{from{transform:translateX(30px);opacity:.6}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion:reduce){.drawer-panel{animation:none}}
+  .drawer-hd{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;background:var(--panel)}
+  .drawer-hd .q{font-size:16px;font-weight:650;letter-spacing:-.01em}
+  .drawer-hd .sub{font-size:12px;color:var(--faint);margin-top:4px}
+  .drawer-x{margin-left:auto;flex:none;width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--muted);display:grid;place-items:center}
+  .drawer-x svg{width:16px;height:16px}
+  .drawer-bd{overflow-y:auto;padding:18px 22px 40px;display:flex;flex-direction:column;gap:16px}
+  .acard{border:1px solid var(--border);border-radius:12px;background:var(--panel);overflow:hidden}
+  .acard-hd{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .atext{padding:4px 18px 8px;font-size:13.5px;line-height:1.6;color:var(--text)}
+  .atext p{margin:9px 0}
+  .atext h4{margin:16px 0 4px;font-size:13px;font-weight:700}
+  .atext .li{margin:5px 0 5px 4px;padding-left:14px;position:relative;color:var(--muted)}
+  .atext .li::before{content:"";position:absolute;left:2px;top:9px;width:4px;height:4px;border-radius:50%;background:var(--accent)}
+  .atext a{color:var(--accent);border-bottom:1px solid var(--accent-line)}
+  .atext strong{color:var(--text);font-weight:650}
+  .asrc{padding:12px 16px;border-top:1px solid var(--border);background:var(--panel-2);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .asrc .lab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-right:4px}
+  .dchip{font-size:11.5px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:3px 9px;font-weight:550}
+  /* forms / modal / auth */
+  .fld{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .fld label{font-size:12px;font-weight:600;color:var(--text)}
+  .fld .hint{font-size:11px;color:var(--faint)}
+  .fld input,.fld textarea{font-family:inherit;font-size:13.5px;color:var(--text);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:9px;padding:9px 11px;width:100%;resize:vertical}
+  .fld input:focus,.fld textarea:focus{outline:2px solid var(--accent-line);border-color:var(--accent)}
+  .modal{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px}
+  .modal.hide{display:none}
+  .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
+  .modal-card{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    box-shadow:0 24px 70px rgba(0,0,0,.35);width:min(520px,96vw);max-height:90vh;overflow-y:auto;padding:22px}
+  .modal-card h2{font-size:17px;margin:0 0 4px}
+  .modal-card .msub{font-size:12.5px;color:var(--faint);margin-bottom:16px}
+  .modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+  .authwrap{min-height:100vh;display:grid;place-items:center;padding:24px}
+  .authcard{background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);
+    padding:34px 32px;width:min(400px,94vw);text-align:center}
+  .authcard .mark{width:44px;height:44px;border-radius:12px;background:var(--accent);display:grid;place-items:center;margin:0 auto 16px;color:#fff;box-shadow:0 4px 16px var(--accent-line)}
+  .authcard .mark svg{width:24px;height:24px}
+  .authcard h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+  .authcard p{font-size:13px;color:var(--muted);margin:0 0 20px}
+  .authcard input{width:100%;font-size:14px;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);margin-bottom:12px;font-family:inherit}
+  .authcard .btn{width:100%;justify-content:center;padding:11px}
+  .authmsg{font-size:12.5px;margin-top:14px;color:var(--muted)}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:90;background:var(--text);
+    color:var(--bg);font-size:13px;font-weight:600;padding:10px 18px;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:spin .8s linear infinite;margin:60px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (max-width:900px){
+    .app{grid-template-columns:1fr}
+    .side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;overflow:visible}
+    .side .who{display:none}.navsec{display:none}
+    .tiles{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr!important}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="auth" class="authwrap hide">
+  <div class="authcard">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12c3-6 15-6 18 0-3 6-15 6-18 0Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></div>
+    <h1>Vantage</h1>
+    <p>AI visibility monitoring. Sign in with your work email and we'll send a one-tap link.</p>
+    <input id="authEmail" type="email" placeholder="you@95projects.com" autocomplete="email">
+    <button class="btn" id="authBtn" onclick="sendLink()">Send magic link</button>
+    <div class="authmsg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loading" class="hide"><div class="spinner"></div></div>
+
+<!-- APP -->
+<div id="app" class="app hide">
+  <aside class="side">
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12c3-6 15-6 18 0-3 6-15 6-18 0Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></div>
+      <div><b>Vantage</b><span>AI Visibility</span></div>
+    </div>
+    <div class="navsec" id="nav"></div>
+    <div class="who">
+      <div class="av" id="uav">?</div>
+      <div id="uemail" style="overflow:hidden;text-overflow:ellipsis"></div>
+      <button class="out" onclick="signOut()">Sign out</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<!-- drawer -->
+<div id="drawer" class="drawer hide">
+  <div class="drawer-bg" onclick="closeDrawer()"></div>
+  <div class="drawer-panel" role="dialog" aria-modal="true">
+    <div class="drawer-hd"><div><div class="q" id="drawer-q"></div><div class="sub" id="drawer-sub"></div></div>
+      <button class="drawer-x" onclick="closeDrawer()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="drawer-bd" id="drawer-bd"></div>
+  </div>
+</div>
+
+<!-- modal -->
+<div id="modal" class="modal hide">
+  <div class="modal-bg" onclick="closeModal()"></div>
+  <div class="modal-card" id="modal-card"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_URL = 'https://fqvcsegmfxfmozqkgbtg.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxdmNzZWdtZnhmbW96cWtnYnRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3NDAxMDEsImV4cCI6MjEwMDMxNjEwMX0.4HPwvxH3itnBk1H1ApykX43ifqhFZ76cwZh7MH4USGs';
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
+const state = { clients:[], prompts:[], results:[], view:'clients', clientId:null, tab:'overview' };
+
+const $ = id => document.getElementById(id);
+const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+function initials(n){return (n||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||n.slice(0,2).toUpperCase();}
+function colorFor(s){let h=0;for(const c of (s||'')){h=(h*31+c.charCodeAt(0))>>>0;}return PALETTE[h%PALETTE.length];}
+const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:'Claude',c:'#D97757',i:'C'}:m==='perplexity'?{n:'Perplexity',c:'#20808D',i:'P'}:{n:'Gemini',c:'#4285F4',i:'G'};
+const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:['off','No mention'];
+
+// ---------- AUTH ----------
+window.sendLink = async function(){
+  const email=$('authEmail').value.trim();
+  if(!email){ $('authMsg').textContent='Enter your email.'; return; }
+  $('authBtn').disabled=true; $('authMsg').textContent='Sending…';
+  const redirect = location.href.split('#')[0];
+  const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: redirect } });
+  $('authBtn').disabled=false;
+  $('authMsg').textContent = error ? ('Error: '+error.message) : 'Check your email for the sign-in link.';
+};
+window.signOut = async function(){ await sb.auth.signOut(); location.reload(); };
+
+// ---------- DATA ----------
+async function loadAll(){
+  const [c,p,r] = await Promise.all([
+    sb.from('clients').select('*').order('created_at'),
+    sb.from('prompts').select('*'),
+    sb.from('results').select('*').order('run_date',{ascending:false}),
+  ]);
+  if(c.error||p.error||r.error){ toast('Load error: '+((c.error||p.error||r.error).message)); }
+  state.clients=c.data||[]; state.prompts=p.data||[]; state.results=r.data||[];
+}
+const clientResults = cid => state.results.filter(r=>r.client_id===cid);
+const clientPrompts = cid => state.prompts.filter(p=>p.client_id===cid);
+function latestRows(cid){
+  const rs=clientResults(cid); if(!rs.length) return [];
+  const d=rs.reduce((m,r)=>r.run_date>m?r.run_date:m, rs[0].run_date);
+  return rs.filter(r=>r.run_date===d);
+}
+function promptKind(cid, text){
+  const p=clientPrompts(cid).find(x=>x.text===text);
+  return p?p.kind:'unbranded';
+}
+function summary(cid){
+  const rows=latestRows(cid);
+  const total=rows.length;
+  const ment=rows.filter(r=>r.client_mentioned).length;
+  const unb=rows.filter(r=>promptKind(cid,r.prompt_text)!=='branded');
+  const unbMent=unb.filter(r=>r.client_mentioned).length;
+  // share of voice among unbranded
+  const client=state.clients.find(c=>c.id===cid);
+  const brandCount={};
+  for(const r of unb){
+    const brands=new Set([...(r.other_brands||[]),...(r.competitors_mentioned||[])]);
+    if(r.client_mentioned && client) brands.add(client.name);
+    for(const b of brands) brandCount[b]=(brandCount[b]||0)+1;
+  }
+  const board=Object.entries(brandCount).map(([n,c])=>({n,c})).sort((a,b)=>b.c-a.c);
+  const denom=unb.length||1;
+  let rank=board.findIndex(b=>client&&b.n===client.name); rank = rank<0?null:rank+1;
+  // sentiment
+  const sc={positive:0,neutral:0,negative:0};
+  rows.forEach(r=>{ if(r.sentiment&&sc[r.sentiment]!=null) sc[r.sentiment]++; });
+  let sentLabel='No data';
+  const sentTotal=sc.positive+sc.neutral+sc.negative;
+  if(sentTotal){ sentLabel = (sc.positive>=sc.negative && sc.positive>=sc.neutral)?'Positive': (sc.negative>sc.positive)?'Negative':'Mixed';
+    if(sc.positive&&sc.negative) sentLabel='Mixed'; }
+  return {
+    total, vis: total?Math.round(ment/total*100):0,
+    unbVis: unb.length?Math.round(unbMent/unb.length*100):0,
+    board, denom, rank, sentLabel, sc, promptCount: clientPrompts(cid).length,
+  };
+}
+
+// ---------- RENDER: shell ----------
+function renderNav(){
+  const nav=$('nav');
+  if(state.view==='clients'){
+    nav.innerHTML = navBtn('clients','Clients',true,gridIcon());
+  } else {
+    const c=state.clients.find(x=>x.id===state.clientId);
+    nav.innerHTML = '<div class="navlbl">'+esc(c?c.name:'')+'</div>'+
+      ['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'competitors','Competitors',peopleIcon(),'sources','Cited sources',linkIcon()]
+      .reduce((acc,_,i,a)=> i%3===0? acc+navTab(a[i],a[i+1],a[i+2]) : acc, '') +
+      '<div class="navsec" style="padding:0"><button class="navitem" onclick="go(\'clients\')" style="margin-top:8px">'+backIcon()+'All clients</button></div>';
+  }
+}
+const navBtn=(v,l,active,icon)=>`<button class="navitem ${active?'active':''}" onclick="go('${v}')">${icon}${l}</button>`;
+const navTab=(t,l,icon)=>`<button class="navitem ${state.tab===t?'active':''}" onclick="setTab('${t}')">${icon}${l}${t==='prompts'?'<span class="badge">'+clientPrompts(state.clientId).length+'</span>':''}</button>`;
+function gridIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';}
+function barIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13h6v8H3zM15 3h6v18h-6zM9 8h6v13H9z"/></svg>';}
+function listIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';}
+function peopleIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M15 20a4 4 0 0 1 6 0"/></svg>';}
+function linkIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';}
+function backIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 18l-6-6 6-6"/></svg>';}
+function chev(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>';}
+
+// ---------- RENDER: clients ----------
+function renderClients(){
+  $('topbar').innerHTML = `<div><div class="crumb">Workspace</div><div class="h1">Clients</div></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
+    <button class="btn" onclick="addClientModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add client</button>`;
+  if(!state.clients.length){
+    $('content').innerHTML = `<div class="note" style="max-width:520px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No clients yet. Click "Add client" to start tracking one. The daily run picks it up automatically.</div>`;
+    return;
+  }
+  const cards = state.clients.map(c=>{
+    const s=summary(c.id);
+    const tagc = c.status==='pitch'?'var(--faint)':'var(--pos)';
+    return `<button class="ccard" onclick="openClient('${c.id}')">
+      <div class="row1"><span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>
+        <div><div class="nm">${esc(c.name)}</div><span class="tag" style="color:${tagc};background:color-mix(in srgb,${tagc} 14%,transparent)">${esc(c.status)}</span></div></div>
+      <div class="stats">
+        <div class="stat"><div class="k">Visibility</div><div class="v tnum">${s.total?s.vis+'%':'—'}</div></div>
+        <div class="stat"><div class="k">SoV rank</div><div class="v tnum">${s.rank?('#'+s.rank):'—'}</div></div>
+        <div class="stat"><div class="k">Prompts</div><div class="v tnum">${s.promptCount}</div></div>
+      </div></button>`;
+  }).join('');
+  $('content').innerHTML = `<div class="clientgrid">${cards}</div>`;
+}
+
+// ---------- RENDER: client detail ----------
+function renderClient(){
+  const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
+  const titles={overview:'Overview',prompts:'Prompts',competitors:'Competitors',sources:'Cited sources'};
+  $('topbar').innerHTML = `<div><div class="crumb"><a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b></div><div class="h1">${titles[state.tab]}</div></div>
+    <div class="spacer"></div>
+    <div class="pill-select"><b>${clientResults(c.id).length? new Set(clientResults(c.id).map(r=>r.model)).size : 0}</b> models</div>
+    <button class="btn ghost" onclick="loadAndRender()">Refresh</button>`;
+  const tabbar = `<div class="tabs">`+
+    ['overview','Overview','prompts','Prompts','competitors','Competitors','sources','Cited sources']
+    .reduce((a,_,i,arr)=> i%2===0? a+`<button class="tab ${state.tab===arr[i]?'on':''}" onclick="setTab('${arr[i]}')">${arr[i+1]}</button>`:a,'')+`</div>`;
+  let body='';
+  if(state.tab==='overview') body=overviewHTML(c);
+  else if(state.tab==='prompts') body=promptsHTML(c);
+  else if(state.tab==='competitors') body=competitorsHTML(c);
+  else if(state.tab==='sources') body=sourcesHTML(c);
+  $('content').innerHTML = tabbar + `<div style="padding-top:18px">${body}</div>`;
+}
+
+function overviewHTML(c){
+  const rows=latestRows(c.id);
+  if(!rows.length) return emptyClient();
+  const s=summary(c.id);
+  const tiles = `<div class="tiles">
+    ${tile('AI Visibility', s.vis+'%', `Appeared in ${rows.filter(r=>r.client_mentioned).length} of ${rows.length} responses`, 'var(--accent)')}
+    ${tile('Unbranded visibility', s.unbVis+'%', 'Buyer-intent prompts. The gap to close.', s.unbVis<40?'var(--neg)':'var(--pos)', s.unbVis<40?'var(--neg)':null)}
+    ${tile('Share of voice', s.rank?('#'+s.rank):'—', s.rank?`of ${s.board.length} brands on unbranded prompts`:'no unbranded data', 'var(--s2)')}
+    ${tile('Sentiment', s.sentLabel, `${s.sc.positive} pos · ${s.sc.neutral} neu · ${s.sc.negative} neg`, 'var(--neu)', null, 22)}
+  </div>`;
+  // share of voice table
+  const board=s.board.slice(0,7);
+  const sov = board.length? `<table><tbody>${board.map((b,i)=>{
+    const me=b.n===c.name;
+    return `<tr class="${me?'me':''}"><td class="rank tnum">${i+1}</td>
+      <td><div class="brandcell"><span class="lg" style="background:${me?'var(--accent)':colorFor(b.n)}">${esc(initials(b.n))}</span>${esc(b.n)}</div></td>
+      <td style="width:120px"><div style="display:flex;align-items:center;gap:8px"><div class="bar"><i style="width:${Math.round(b.c/s.denom*100)}%;background:${me?'var(--accent)':colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px;font-weight:600">${Math.round(b.c/s.denom*100)}%</span></div></td></tr>`;
+  }).join('')}</tbody></table>` : `<div class="note">No unbranded prompts yet.</div>`;
+  // prompt performance
+  const models=[...new Set(rows.map(r=>r.model))];
+  const perf = promptPerfTable(c, models);
+  // latest answers
+  const ans = rows.slice().sort((a,b)=> (a.client_mentioned===b.client_mentioned)?0:(a.client_mentioned?-1:1)).slice(0,5).map(r=>{
+    const mb=MB(r.model), sc=SENTCHIP(r.sentiment);
+    const snippet=(r.answer||'').replace(/\s+/g,' ').slice(0,180);
+    return `<div class="ans clk" onclick="openPrompt('${c.id}','${encodeURIComponent(r.prompt_text)}')">
+      <div class="top"><span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span>${mb.n}</span>
+      <span class="chip ${r.client_mentioned?'pos':'off'}">${r.client_mentioned?'Mentioned':'Absent'}</span>
+      <span class="meta">${esc(r.run_date)}</span></div>
+      <div class="pr">${esc(r.prompt_text)}</div><div class="txt">${esc(snippet)}…</div>
+      <span class="viewcue">Read full answer${chev()}</span></div>`;
+  }).join('');
+  // sources
+  const src=aggSources(rows);
+  const srcHTML = src.length? src.slice(0,7).map(ssrc=>srcLine(ssrc)).join('') : `<div class="note">No citations captured yet.</div>`;
+  return tiles +
+    `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
+      <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Where you win and lose, per model</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
+      <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
+    </div>
+    <div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
+      <div class="card"><div class="hd"><div><h3>Latest AI answers</h3><p>Captured ${esc(rows[0].run_date)}</p></div></div><div class="bd">${ans}</div></div>
+      <div class="card"><div class="hd"><div><h3>Top cited sources</h3><p>Domains the AIs pulled from</p></div></div><div class="bd">${srcHTML}</div></div>
+    </div>`;
+}
+function tile(lab,val,sub,strip,valColor,fs){
+  return `<div class="tile"><span class="strip" style="background:${strip}"></span>
+    <div class="lab">${lab}</div><div class="val tnum" style="${valColor?'color:'+valColor+';':''}${fs?'font-size:'+fs+'px;margin-top:12px':''}">${esc(val)}</div><div class="sub">${esc(sub)}</div></div>`;
+}
+function promptPerfTable(c, models){
+  const ps=clientPrompts(c.id);
+  const rows=latestRows(c.id);
+  const head=`<thead><tr><th>Prompt</th><th>Type</th>${models.map(m=>`<th>${MB(m).n}</th>`).join('')}<th>Sentiment</th></tr></thead>`;
+  const byPrompt={};
+  rows.forEach(r=>{ (byPrompt[r.prompt_text]=byPrompt[r.prompt_text]||{})[r.model]=r; });
+  const texts=[...new Set([...ps.map(p=>p.text), ...Object.keys(byPrompt)])];
+  const body=texts.map(t=>{
+    const kind=promptKind(c.id,t);
+    const cells=models.map(m=>{ const r=byPrompt[t]&&byPrompt[t][m];
+      if(!r) return `<td><span class="chip off">—</span></td>`;
+      return `<td><span class="chip ${r.client_mentioned?'pos':'off'}">${r.client_mentioned?(r.client_prominence==='featured'?'Featured':'Listed'):'Absent'}</span></td>`; }).join('');
+    const anyR=byPrompt[t]?Object.values(byPrompt[t])[0]:null;
+    const sc=SENTCHIP(anyR&&anyR.client_mentioned?bestSentiment(byPrompt[t]):null);
+    return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(t)}')"><td style="max-width:320px;font-weight:550">${esc(t)} <span class="viewcue">read${chev()}</span></td>
+      <td><span class="chip ${kind==='branded'?'neu':'off'}">${kind}</span></td>${cells}<td><span class="chip ${sc[0]}">${sc[1]}</span></td></tr>`;
+  }).join('');
+  return `<table>${head}<tbody>${body}</tbody></table>`;
+}
+function bestSentiment(modelMap){
+  const order={negative:0,neutral:1,positive:2}; let best=null;
+  for(const r of Object.values(modelMap)){ if(r.sentiment&&(best===null||order[r.sentiment]<order[best])) best=r.sentiment; }
+  return best;
+}
+function aggSources(rows){
+  const cnt={}; let n=0;
+  rows.forEach(r=>{ n++; new Set(r.cited_domains||[]).forEach(d=>cnt[d]=(cnt[d]||0)+1); });
+  return Object.entries(cnt).map(([d,c])=>({d,p:Math.round(c/(n||1)*100)})).sort((a,b)=>b.p-a.p);
+}
+function srcLine(s){return `<div class="srcline"><span class="fav">${esc((s.d||'?')[0].toUpperCase())}</span><span class="dom">${esc(s.d)}</span>
+  <div class="bar" style="flex:1;max-width:150px"><i style="width:${s.p}%"></i></div><span class="pct tnum">${s.p}%</span></div>`;}
+function emptyClient(){return `<div class="note" style="max-width:560px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No results yet. This client will get data after the next daily run (6am ET), or its prompts were just added. Add prompts in the Prompts tab.</div>`;}
+
+function promptsHTML(c){
+  const ps=clientPrompts(c.id);
+  const rows=latestRows(c.id);
+  const byPrompt={}; rows.forEach(r=>{ (byPrompt[r.prompt_text]=byPrompt[r.prompt_text]||[]).push(r); });
+  const groups={branded:[],unbranded:[]};
+  ps.forEach(p=>groups[p.kind==='branded'?'branded':'unbranded'].push(p));
+  function grp(title,arr){ if(!arr.length) return '';
+    const body=arr.map(p=>{
+      const rs=byPrompt[p.text]||[]; const vis=rs.length?Math.round(rs.filter(r=>r.client_mentioned).length/rs.length*100):null;
+      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')"><td style="max-width:340px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
+        <td class="tnum">${vis==null?'—':vis+'%'}</td><td><span class="chip pos dot" style="font-size:10.5px">Active</span></td></tr>`;
+    }).join('');
+    return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Status</th></tr></thead><tbody>${body}</tbody></table>`;
+  }
+  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${new Set(rows.map(r=>r.model)).size||0} models</div><div class="spacer" style="flex:1"></div>
+    <button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
+    <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>`;
+}
+function competitorsHTML(c){
+  const rows=latestRows(c.id).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
+  const cnt={}; rows.forEach(r=>{ new Set([...(r.other_brands||[]),...(r.competitors_mentioned||[])]).forEach(b=>{ if(b!==c.name) cnt[b]=(cnt[b]||0)+1; }); });
+  const board=Object.entries(cnt).map(([n,x])=>({n,c:x})).sort((a,b)=>b.c-a.c);
+  if(!board.length) return `<div class="note">No competitor data yet. It fills in from the other agencies the AIs name on your unbranded prompts.</div>`;
+  const denom=rows.length||1;
+  return `<div class="note" style="margin-bottom:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-discovered from the brands the AIs recommend on this client's unbranded prompts.</div>
+    <div class="card"><div class="bd"><table><thead><tr><th>Rank</th><th>Brand</th><th>Appearances</th><th>Share of voice</th></tr></thead><tbody>
+    ${board.map((b,i)=>`<tr><td class="rank tnum">${i+1}</td><td><div class="brandcell"><span class="lg" style="background:${colorFor(b.n)}">${esc(initials(b.n))}</span>${esc(b.n)}</div></td>
+      <td class="tnum">${b.c} of ${denom}</td><td style="width:150px"><div style="display:flex;align-items:center;gap:8px"><div class="bar" style="max-width:110px"><i style="width:${Math.round(b.c/denom*100)}%;background:${colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px">${Math.round(b.c/denom*100)}%</span></div></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function sourcesHTML(c){
+  const src=aggSources(latestRows(c.id));
+  if(!src.length) return `<div class="note">No citations captured yet.</div>`;
+  return `<div class="card"><div class="hd"><div><h3>Cited domains</h3><p>How often each domain is pulled into answers</p></div></div><div class="bd">${src.map(srcLine).join('')}</div></div>`;
+}
+
+// ---------- DRAWER ----------
+window.openPrompt = function(cid, encText){
+  const text=decodeURIComponent(encText);
+  const c=state.clients.find(x=>x.id===cid);
+  const rows=latestRows(cid).filter(r=>r.prompt_text===text).sort((a,b)=>a.model.localeCompare(b.model));
+  if(!rows.length) return;
+  $('drawer-q').textContent=text;
+  const ment=rows.filter(r=>r.client_mentioned).length;
+  $('drawer-sub').innerHTML=`${c?esc(c.name):''} appears in ${ment} of ${rows.length} answers &middot; ${esc(rows[0].run_date)}`;
+  $('drawer-bd').innerHTML=rows.map(r=>{
+    const mb=MB(r.model), sc=SENTCHIP(r.sentiment); const doms=r.cited_domains||[];
+    return `<div class="acard"><div class="acard-hd"><span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span>${mb.n}</span>
+      <span class="chip ${r.client_mentioned?'pos':'off'}">${r.client_mentioned?'Mentioned':'Absent'}</span><span class="chip ${sc[0]}">${sc[1]}</span></div>
+      <div class="atext">${fmtAnswer(r.answer||'')}</div>
+      ${doms.length?`<div class="asrc"><span class="lab">Cited</span>${doms.map(d=>`<span class="dchip">${esc(d)}</span>`).join('')}</div>`:''}</div>`;
+  }).join('');
+  $('drawer').classList.remove('hide');
+};
+window.closeDrawer=()=>$('drawer').classList.add('hide');
+function fmtAnswer(t){
+  t=esc(t);
+  t=t.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  t=t.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  t=t.replace(/\s{2,}/g,'\n').replace(/\s-\s/g,'\n• ');
+  return t.split('\n').map(l=>{l=l.trim();if(!l)return'';
+    if(/^##/.test(l))return '<h4>'+l.replace(/^#+\s*/,'')+'</h4>';
+    if(/^•/.test(l))return '<div class="li">'+l.replace(/^•\s*/,'')+'</div>';
+    return '<p>'+l+'</p>';}).join('');
+}
+
+// ---------- MODALS (config) ----------
+window.closeModal=()=>$('modal').classList.add('hide');
+function openModal(html){ $('modal-card').innerHTML=html; $('modal').classList.remove('hide'); }
+window.addClientModal=function(){
+  openModal(`<h2>Add client</h2><div class="msub">The daily run starts tracking it automatically.</div>
+    <div class="fld"><label>Client name</label><input id="m_name" placeholder="Acme Corp"></div>
+    <div class="fld"><label>Brand aliases</label><div class="hint">Names/domains that count as the client showing up, comma-separated.</div><input id="m_alias" placeholder="Acme, acme.com, Acme Inc"></div>
+    <div class="fld"><label>Competitors</label><div class="hint">Optional, comma-separated.</div><input id="m_comp" placeholder="Rival One, Rival Two"></div>
+    <div class="fld"><label>Prompts to track</label><div class="hint">One per line. The searches a buyer would type.</div><textarea id="m_prompts" rows="4" placeholder="best crm for startups
+top project management tools"></textarea></div>
+    <div class="fld"><label>Type</label><select id="m_status" class="fld" style="padding:9px 11px;border-radius:9px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)"><option value="client">Client</option><option value="pitch">Pitch</option></select></div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="m_save" onclick="saveClient()">Add client</button></div>`);
+};
+window.saveClient=async function(){
+  const name=$('m_name').value.trim(); if(!name){toast('Name required');return;}
+  const aliases=splitCsv($('m_alias').value); if(!aliases.includes(name)) aliases.unshift(name);
+  const comps=splitCsv($('m_comp').value);
+  const prompts=$('m_prompts').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  $('m_save').disabled=true;
+  const { data:cl, error } = await sb.from('clients').insert({name,slug,aliases,status:$('m_status').value}).select().single();
+  if(error){ $('m_save').disabled=false; toast('Error: '+error.message); return; }
+  if(prompts.length) await sb.from('prompts').insert(prompts.map(t=>({client_id:cl.id,text:t,kind: aliases.some(a=>t.toLowerCase().includes(a.toLowerCase()))?'branded':'unbranded'})));
+  if(comps.length) await sb.from('competitors').insert(comps.map(n=>({client_id:cl.id,name:n})));
+  closeModal(); toast('Client added'); await loadAndRender();
+};
+window.addPromptModal=function(cid){
+  openModal(`<h2>Add prompt</h2><div class="msub">A search to track for this client.</div>
+    <div class="fld"><label>Prompt text</label><textarea id="p_text" rows="2" placeholder="best seo agency for saas"></textarea></div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="p_save" onclick="savePrompt('${cid}')">Add prompt</button></div>`);
+};
+window.savePrompt=async function(cid){
+  const text=$('p_text').value.trim(); if(!text){toast('Enter a prompt');return;}
+  const c=state.clients.find(x=>x.id===cid); const aliases=(c&&c.aliases)||[];
+  $('p_save').disabled=true;
+  const { error } = await sb.from('prompts').insert({client_id:cid,text,kind: aliases.some(a=>text.toLowerCase().includes(a.toLowerCase()))?'branded':'unbranded'});
+  if(error){ $('p_save').disabled=false; toast('Error: '+error.message); return; }
+  closeModal(); toast('Prompt added'); await loadAndRender();
+};
+function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
+
+// ---------- ROUTER ----------
+window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null;} render(); };
+window.openClient=function(id){ state.view='client'; state.clientId=id; state.tab='overview'; render(); };
+window.setTab=function(t){ state.tab=t; render(); };
+function render(){ renderNav(); if(state.view==='clients') renderClients(); else renderClient(); window.scrollTo(0,0); }
+window.loadAndRender=async function(){ await loadAll(); render(); };
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){closeDrawer();closeModal();} });
+
+// ---------- BOOT ----------
+async function boot(){
+  $('loading').classList.remove('hide');
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $('loading').classList.add('hide'); $('auth').classList.remove('hide'); return; }
+  const email=session.user.email||'';
+  $('uemail').textContent=email; $('uav').textContent=(email[0]||'?').toUpperCase();
+  await loadAll();
+  $('loading').classList.add('hide'); $('app').classList.remove('hide');
+  render();
+}
+sb.auth.onAuthStateChange((event)=>{ if(event==='SIGNED_IN' && $('app').classList.contains('hide')) boot(); });
+boot();
+</script>
+</body>
+</html>
