@@ -262,6 +262,7 @@
   .fld input,.fld textarea{font-family:inherit;font-size:13.5px;color:var(--text);background:var(--panel-2);
     border:1px solid var(--border);border-radius:9px;padding:9px 11px;width:100%;resize:vertical}
   .fld input:focus,.fld textarea:focus{outline:2px solid var(--accent-line);border-color:var(--accent)}
+  .fld input[type=checkbox]{width:auto;flex:none;padding:0;margin:0;cursor:pointer}
   .modal{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px}
   .modal.hide{display:none}
   .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
@@ -519,6 +520,7 @@ function renderClient(){
   $('topbar').innerHTML = `<div><div class="crumb"><a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b></div><div class="h1">${titles[state.tab]}</div></div>
     <div class="spacer"></div>
     ${filterControls(c.id)}
+    <button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`;
   const tabbar = `<div class="tabs">`+
@@ -787,6 +789,31 @@ window.savePrompt=async function(cid){
   closeModal(); toast('Prompt added, running it now'); await loadAll(); render(); startRun(cid);
 };
 function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
+window.clientSettingsModal=function(cid){
+  const c=state.clients.find(x=>x.id===cid); if(!c) return;
+  const models=c.models||['openai','anthropic'];
+  const have=['openai','anthropic']; // platforms with live keys
+  const modelBox=CANON_MODELS.map(m=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;${have.includes(m)?'':'opacity:.5'}">
+    <input type="checkbox" data-model="${m}" ${models.includes(m)?'checked':''} ${have.includes(m)?'':'disabled'}> ${MB(m).n}${have.includes(m)?'':' (no key)'}</label>`).join('');
+  openModal(`<h2>${esc(c.name)} — settings</h2><div class="msub">Control how often this client runs and which models it uses, to manage credit spend.</div>
+    <div class="fld"><label>Run frequency</label><div class="hint">How often the scheduler runs this client's prompts. A manual "Run now" always runs regardless.</div>
+      <select id="s_freq" class="fsel" style="width:100%;padding:9px 11px">
+        <option value="daily"${c.frequency==='daily'?' selected':''}>Daily</option>
+        <option value="every_other_day"${c.frequency==='every_other_day'?' selected':''}>Every other day</option>
+        <option value="weekly"${c.frequency==='weekly'?' selected':''}>Weekly</option></select></div>
+    <div class="fld"><label>Models to run</label><div class="hint">Fewer models = less credit spend.</div><div id="s_models" style="display:flex;flex-direction:column;gap:8px;margin-top:5px">${modelBox}</div></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600"><input type="checkbox" id="s_autoact" ${c.actions_auto_weekly?'checked':''}> Auto-generate Actions weekly</label><div class="hint">Off by default. When on, recommendations refresh every Monday (uses credits). Otherwise generate them manually from the Actions tab.</div></div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveSettings('${cid}')">Save settings</button></div>`);
+};
+window.saveSettings=async function(cid){
+  const freq=$('s_freq').value;
+  let models=[...document.querySelectorAll('#s_models input[type=checkbox]:checked')].map(i=>i.dataset.model);
+  if(!models.length) models=['openai'];
+  const auto=$('s_autoact').checked;
+  const {error}=await sb.from('clients').update({frequency:freq, models, actions_auto_weekly:auto}).eq('id',cid);
+  if(error){ toast('Error: '+error.message); return; }
+  closeModal(); toast('Settings saved'); await loadAll(); render();
+};
 window.deletePrompt=async function(id){
   if(!confirm('Delete this prompt? It stops being tracked from the next run on. Past results stay in history.')) return;
   const { error } = await sb.from('prompts').delete().eq('id', id);
