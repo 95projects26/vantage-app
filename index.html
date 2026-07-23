@@ -83,9 +83,6 @@
   .crumb a{cursor:pointer}
   .h1{font-size:19px;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
   .spacer{flex:1}
-  .pill-select{display:inline-flex;align-items:center;gap:7px;background:var(--panel);
-    border:1px solid var(--border);border-radius:9px;padding:7px 11px;font-size:12.5px;color:var(--muted)}
-  .pill-select b{color:var(--text);font-weight:600}
   .btn{display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#fff;border:none;
     border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;box-shadow:0 2px 10px var(--accent-line)}
   .btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--border);box-shadow:none}
@@ -100,13 +97,6 @@
   .seg button{border:none;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px}
   .seg button.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
   .fsel{font-family:inherit;font-size:12.5px;font-weight:500;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:7px 9px;cursor:pointer}
-  .actcard{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow)}
-  .actbody{flex:1;min-width:0}
-  .acttop{display:flex;align-items:center;gap:8px;margin-bottom:2px}
-  .acttitle{font-weight:600;font-size:14px;line-height:1.35;margin-top:6px}
-  .actrat{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5}
-  .actev{font-size:11.5px;color:var(--faint);margin-top:7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis}
-  .actbtns{display:flex;gap:8px;align-items:center;flex:none}
   .catchip{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
   /* kanban */
   .kboard{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
@@ -223,6 +213,9 @@
   tr.clk:hover td{background:var(--panel-2)}
   .viewcue{font-size:11px;color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:3px}
   .viewcue svg{width:12px;height:12px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--muted);font-weight:550}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:10px;height:10px;border-radius:3px;flex:none}
   /* drawer */
   .drawer{position:fixed;inset:0;z-index:60}
   .drawer.hide{display:none}
@@ -362,7 +355,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -374,6 +367,8 @@ function initials(n){return (n||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').fil
 function colorFor(s){let h=0;for(const c of (s||'')){h=(h*31+c.charCodeAt(0))>>>0;}return PALETTE[h%PALETTE.length];}
 const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:'Claude',c:'#D97757',i:'C'}:m==='perplexity'?{n:'Perplexity',c:'#20808D',i:'P'}:m==='gemini'?{n:'Gemini',c:'#4285F4',i:'G'}:m==='aio'?{n:'Google AI Overviews',c:'#4285F4',i:'A'}:{n:m,c:'#6E7A93',i:'?'};
 const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:['off','No mention'];
+// Group rows into { key -> [rows] } by a field name.
+function groupBy(rows, key){ const m={}; rows.forEach(r=>{ (m[r[key]]=m[r[key]]||[]).push(r); }); return m; }
 
 // ---------- AUTH ----------
 window.sendLink = async function(){
@@ -452,7 +447,7 @@ function summary(cid){
   const sentTotal=sc.positive+sc.neutral+sc.negative;
   if(sentTotal){ sentLabel = (sc.positive>=sc.negative && sc.positive>=sc.neutral)?'Positive': (sc.negative>sc.positive)?'Negative':'Mixed';
     if(sc.positive&&sc.negative) sentLabel='Mixed'; }
-  // trend: this 7-day window vs the prior 7-day window
+  // trend: this window vs the prior window of equal length
   const md=maxDate(cid);
   let prevVis=null;
   if(md){
@@ -554,11 +549,11 @@ function overviewHTML(c){
   const s=summary(c.id);
   const dLbl=`${s.dayCount} day${s.dayCount>1?'s':''}`;
   const visSub = s.prevVis!=null
-    ? `${s.mentioned} of ${s.total} over ${dLbl} · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior 7d`
+    ? `${s.mentioned} of ${s.total} over ${dLbl} · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
     : `${s.mentioned} of ${s.total} responses over ${dLbl}`;
   const sovSub = s.rank ? `of ${s.board.length} brands (top 50 tracked)`
     : (s.clientInUnbranded ? `outside the top 50 of ${s.totalBrands}` : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data'));
-  const tiles = `<div class="eyebrow" style="margin-bottom:11px">Rolling 7-day window · through ${esc(s.windowEnd||'')}</div><div class="tiles">
+  const tiles = `<div class="eyebrow" style="margin-bottom:11px">Rolling ${state.windowDays}-day window · through ${esc(s.windowEnd||'')}</div><div class="tiles">
     ${tile('AI Visibility', s.vis+'%', visSub, 'var(--accent)')}
     ${tile('Unbranded visibility', s.unbVis+'%', 'Buyer-intent prompts. The gap to close.', s.unbVis<40?'var(--neg)':'var(--pos)', s.unbVis<40?'var(--neg)':null)}
     ${tile('Share of voice', s.rank?('#'+s.rank):'—', sovSub, 'var(--s2)')}
@@ -595,8 +590,8 @@ function overviewHTML(c){
       <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
     </div>
     <div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
-      <div class="card"><div class="hd"><div><h3>Latest AI answers</h3><p>Latest run · ${esc(rows[0].run_date)}</p></div><div class="spacer" style="flex:1"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('answers')">View all ${chev()}</button></div><div class="bd">${ans}</div></div>
-      <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — get featured here</p></div><div class="spacer" style="flex:1"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('sources')">View all ${chev()}</button></div><div class="bd">${srcHTML}</div></div>
+      <div class="card"><div class="hd"><div><h3>Latest AI answers</h3><p>Latest run · ${esc(rows[0].run_date)}</p></div><div class="spacer"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('answers')">View all ${chev()}</button></div><div class="bd">${ans}</div></div>
+      <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — get featured here</p></div><div class="spacer"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('sources')">View all ${chev()}</button></div><div class="bd">${srcHTML}</div></div>
     </div>`;
 }
 function tile(lab,val,sub,strip,valColor,fs){
@@ -639,7 +634,7 @@ function emptyClient(){return `<div class="note" style="max-width:560px"><svg vi
 function promptsHTML(c){
   const ps=clientPrompts(c.id);
   const rows=latestRows(c.id);
-  const byPrompt={}; rows.forEach(r=>{ (byPrompt[r.prompt_text]=byPrompt[r.prompt_text]||[]).push(r); });
+  const byPrompt=groupBy(rows,'prompt_text');
   const groups={branded:[],unbranded:[]};
   ps.forEach(p=>groups[p.kind==='branded'?'branded':'unbranded'].push(p));
   function grp(title,arr){ if(!arr.length) return '';
@@ -651,12 +646,12 @@ function promptsHTML(c){
     }).join('');
     return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   }
-  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${new Set(rows.map(r=>r.model)).size||0} models</div><div class="spacer" style="flex:1"></div>
+  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${new Set(rows.map(r=>r.model)).size||0} models</div><div class="spacer"></div>
     <button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
     <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>
     <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
       <div><div style="font-weight:600;font-size:13px">Danger zone</div><div style="font-size:12px;color:var(--faint)">Deleting a client removes all of its prompts and history permanently.</div></div>
-      <div class="spacer" style="flex:1"></div>
+      <div class="spacer"></div>
       <button class="btn danger" onclick="deleteClient('${c.id}')">${trashIcon()}Delete client</button></div>`;
 }
 function lineChart(series, labels){
@@ -769,8 +764,7 @@ function answerCard(r){
     ${doms.length?`<div class="asrc"><span class="lab">Cited</span>${doms.map(d=>`<span class="dchip">${esc(d)}</span>`).join('')}</div>`:''}</div>`;
 }
 function promptHistory(cid, text){
-  const byDate={};
-  viewResults(cid).filter(r=>r.prompt_text===text).forEach(r=>{ (byDate[r.run_date]=byDate[r.run_date]||[]).push(r); });
+  const byDate=groupBy(viewResults(cid).filter(r=>r.prompt_text===text),'run_date');
   return Object.keys(byDate).sort().reverse().map(d=>({date:d, rows:byDate[d].sort((a,b)=>a.model.localeCompare(b.model))}));
 }
 window.openPrompt = function(cid, encText, showAll){
@@ -802,7 +796,7 @@ window.closeDrawer=()=>$('drawer').classList.add('hide');
 function answersHTML(c){
   const rows=clientResults(c.id);
   if(!rows.length) return emptyClient();
-  const byDate={}; rows.forEach(r=>{ (byDate[r.run_date]=byDate[r.run_date]||[]).push(r); });
+  const byDate=groupBy(rows,'run_date');
   const dates=Object.keys(byDate).sort().reverse();
   const feed=dates.map(d=>{
     const day=byDate[d].slice().sort((a,b)=> (a.prompt_text+a.model).localeCompare(b.prompt_text+b.model));
@@ -834,7 +828,7 @@ function openModal(html){ $('modal-card').className='modal-card'; $('modal-card'
 window.addClientModal=function(){
   openModal(`<h2>Add client</h2><div class="msub">The daily run starts tracking it automatically.</div>
     <div class="fld"><label>Client name</label><input id="m_name" placeholder="Acme Corp"></div>
-    <div class="fld"><label>Website URL <span style="color:var(--danger,#e5484d)">*</span></label><div class="hint">Required. The client's main website.</div><input id="m_site" placeholder="https://acme.com"></div>
+    <div class="fld"><label>Website URL <span style="color:var(--neg)">*</span></label><div class="hint">Required. The client's main website.</div><input id="m_site" placeholder="https://acme.com"></div>
     <div class="fld"><label>Brand aliases</label><div class="hint">Names/domains that count as the client showing up, comma-separated.</div><input id="m_alias" placeholder="Acme, acme.com, Acme Inc"></div>
     <div class="fld"><label>Competitors</label><div class="hint">Optional, comma-separated.</div><input id="m_comp" placeholder="Rival One, Rival Two"></div>
     <div class="fld"><label>Prompts to track</label><div class="hint">One per line. The searches a buyer would type.</div><textarea id="m_prompts" rows="4" placeholder="best crm for startups
@@ -936,7 +930,7 @@ function fmtDate(iso){ return (iso||'').slice(0,10); }
 function actionsTabHTML(c){
   const acts=clientActions(c.id);
   const genBtn=`<button class="btn" onclick="genActions('${c.id}')" ${state.genRunning?'disabled':''}>${state.genRunning?'<span class="mini-spin"></span>Generating…':boltIcon()+'Generate recommendations'}</button>`;
-  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Recommended actions</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">What to build or earn to start showing up in AI answers. Move cards Suggested → To Do → In Progress → Review → Done. Click a card for details, must-haves, sources and comments.</div></div><div class="spacer" style="flex:1"></div>${genBtn}</div>`;
+  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Recommended actions</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">What to build or earn to start showing up in AI answers. Move cards Suggested → To Do → In Progress → Review → Done. Click a card for details, must-haves, sources and comments.</div></div><div class="spacer"></div>${genBtn}</div>`;
   const banner=state.genRunning?`<div class="runbanner"><span class="mini-spin"></span>Analyzing your gaps and writing recommendations. About a minute; they'll appear here automatically.</div>`:'';
   if(!acts.length) return intro+banner+`<div class="note" style="max-width:560px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No recommendations yet. Click "Generate recommendations" and Vantage will analyze this client's gaps.</div>`;
   const board=COLS.map(([key,name,color])=>{
@@ -971,8 +965,8 @@ function renderActionDetail(id, comments){
   const statusSel=`<select class="fsel" style="font-size:12.5px" onchange="moveAction('${a.id}',this.value)">${COLS.map(([k,n])=>`<option value="${k}"${a.status===k?' selected':''}>${n}</option>`).join('')}</select>`;
   const musts=(a.must_haves||[]).map(mh=>`<div class="adet-must"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><div>${esc(mh)}</div></div>`).join('');
   const src=topCited(a.client_id);
-  const srcHTML=src.length? src.map(s=>{ let host=s.u; try{host=new URL(s.u).hostname.replace(/^www\./,'')}catch{}
-    return `<div class="adet-src"><a href="${esc(s.u)}" target="_blank" rel="noopener" title="${esc(s.u)}">${esc(host)}</a><span class="n">${s.c} citation${s.c>1?'s':''}</span></div>`; }).join('') : `<div style="font-size:12.5px;color:var(--faint)">No citation data yet.</div>`;
+  const srcHTML=src.length? src.map(s=>
+    `<div class="adet-src"><a href="${esc(s.u)}" target="_blank" rel="noopener" title="${esc(s.u)}">${esc(srcHost(s.u))}</a><span class="n">${s.c} citation${s.c>1?'s':''}</span></div>`).join('') : `<div style="font-size:12.5px;color:var(--faint)">No citation data yet.</div>`;
   const cmtHTML=comments.length? comments.map(cm=>`<div class="cmt"><div class="av">${esc((cm.author||'?')[0].toUpperCase())}</div><div style="flex:1"><div><span class="who">${esc((cm.author||'').split('@')[0]||'user')}</span><span class="when">${fmtDate(cm.created_at)}</span></div><div class="body">${esc(cm.body)}</div></div></div>`).join('') : `<div style="text-align:center;color:var(--faint);font-size:12.5px;padding:14px 0">No comments yet. Be the first.</div>`;
   const cap=s=>s? s[0].toUpperCase()+s.slice(1):s;
   $('modal-card').className='modal-card modal-wide';
@@ -1042,7 +1036,7 @@ window.genActions=async function(cid){
 function explorerHTML(c){
   const sug=clientSuggestions(c.id);
   const genBtn=`<button class="btn" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':compassIcon()+'Generate prompt ideas'}</button>`;
-  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Prompt Explorer</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">Buyer queries in this client's space worth tracking, ranked by how commonly they're searched. Add the ones that matter.</div></div><div class="spacer" style="flex:1"></div>${genBtn}</div>`;
+  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Prompt Explorer</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">Buyer queries in this client's space worth tracking, ranked by how commonly they're searched. Add the ones that matter.</div></div><div class="spacer"></div>${genBtn}</div>`;
   const banner=state.insightsRunning?`<div class="runbanner"><span class="mini-spin"></span>Mapping topics and prompts for this client's niche. About a minute.</div>`:'';
   if(!sug.length) return intro+banner+`<div class="note" style="max-width:560px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No prompt ideas yet. Click "Generate prompt ideas" to map this client's space.</div>`;
   const tracked=new Set(clientPrompts(c.id).map(p=>p.text.toLowerCase()));
@@ -1092,9 +1086,9 @@ function perceptionHTML(c){
   const distro=`<div style="display:flex;gap:8px;margin-top:6px">
     <span class="chip pos">${sc.positive} positive</span><span class="chip neu">${sc.neutral} neutral</span><span class="chip neg">${sc.negative} negative</span></div>`;
   const sentCard=`<div class="card"><div class="hd"><div><h3>Sentiment over time</h3><p>How favorably the models talk about ${esc(c.name)} when mentioned</p></div></div><div class="bd">${chart||'<div class="note">Not enough mentions yet for a trend.</div>'}${distro}</div></div>`;
-  if(!p) return `<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">AI Perception</div><div style="font-size:12.5px;color:var(--faint)">How ChatGPT and Claude characterize this brand.</div></div><div class="spacer" style="flex:1"></div><button class="btn" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Generate perception'}</button></div>${state.insightsRunning?'<div class="runbanner"><span class="mini-spin"></span>Reading how the models describe this brand.</div>':''}<div class="note" style="max-width:560px;margin-bottom:16px">No perception summary yet. Click "Generate perception".</div>${sentCard}`;
+  if(!p) return `<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">AI Perception</div><div style="font-size:12.5px;color:var(--faint)">How ChatGPT and Claude characterize this brand.</div></div><div class="spacer"></div><button class="btn" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Generate perception'}</button></div>${state.insightsRunning?'<div class="runbanner"><span class="mini-spin"></span>Reading how the models describe this brand.</div>':''}<div class="note" style="max-width:560px;margin-bottom:16px">No perception summary yet. Click "Generate perception".</div>${sentCard}`;
   const list=(arr,cls)=>arr.map(x=>`<div class="adet-must"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:${cls}"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg><div>${esc(x)}</div></div>`).join('');
-  return `<div style="display:flex;align-items:center;margin-bottom:14px"><div class="eyebrow">How AI perceives ${esc(c.name)} · updated ${fmtDate(p.generated_at)}</div><div class="spacer" style="flex:1"></div>${genBtn}</div>
+  return `<div style="display:flex;align-items:center;margin-bottom:14px"><div class="eyebrow">How AI perceives ${esc(c.name)} · updated ${fmtDate(p.generated_at)}</div><div class="spacer"></div>${genBtn}</div>
     <div class="card" style="margin-bottom:16px"><div class="bd"><div style="font-size:14px;line-height:1.6">${esc(p.summary||'')}</div>
       ${(p.keywords||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:14px">${(p.keywords||[]).map(k=>`<span class="dchip">${esc(k)}</span>`).join('')}</div>`:''}</div></div>
     <div class="grid two" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
@@ -1113,9 +1107,6 @@ function filterControls(cid){
 }
 window.setWindow=function(d){ state.windowDays=d; render(); };
 window.setModel=function(m){ state.modelFilter=m; render(); };
-function aggUrls(rows){ const cnt={}; const n=rows.length;
-  rows.forEach(r=>{ new Set(r.cited_urls||[]).forEach(u=>cnt[u]=(cnt[u]||0)+1); });
-  return Object.entries(cnt).map(([u,c])=>({u,c,pct:Math.round(c/(n||1)*100)})).sort((a,b)=>b.c-a.c); }
 window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
 window.openClient=function(id){ state.view='client'; state.clientId=id; state.tab='overview'; render(); };
 window.setTab=function(t){ state.view='client'; state.tab=t; render(); };
@@ -1130,7 +1121,7 @@ function renderPromptPage(){
   const text=state.promptText;
   // rows for this prompt within the active window + model filter, grouped by day
   const wrows=windowRows(c.id, state.windowDays).filter(r=>r.prompt_text===text);
-  const byDate={}; wrows.forEach(r=>{ (byDate[r.run_date]=byDate[r.run_date]||[]).push(r); });
+  const byDate=groupBy(wrows,'run_date');
   const hist=Object.keys(byDate).sort().reverse().map(d=>({date:d, rows:byDate[d].sort((a,b)=>a.model.localeCompare(b.model))}));
   $('topbar').innerHTML=`<div style="min-width:0"><div class="crumb"><a onclick="go('clients')">Clients</a> / <a onclick="openClient('${c.id}')">${esc(c.name)}</a> / <b>Prompt history</b></div><div class="h1">${esc(text)}</div></div>
     <div class="spacer"></div>
@@ -1172,7 +1163,7 @@ async function startRun(cid){
   if(state.running || !cid) return;
   const { error } = await sb.rpc('trigger_run', { p_client: cid });
   if(error){ toast('Could not start run: '+error.message); return; }
-  state.running=true; state.runStart=Date.now();
+  state.running=true;
   const sinceIso = new Date(Date.now()-8000).toISOString();
   toast('Running the prompts now — about 1-2 minutes');
   render();
