@@ -149,6 +149,7 @@
   .rank{color:var(--faint);font-weight:600;width:26px}
   .brandcell{display:flex;align-items:center;gap:9px;font-weight:600}
   .lg{border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;flex:none;width:22px;height:22px}
+  .lg.sm{width:20px;height:20px;font-size:9px}
   .fav{width:20px;height:20px;flex:none;border-radius:5px;background:var(--panel-2);border:1px solid var(--border);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--muted);overflow:hidden}
   /* logo tiles: real logo fills the tile; initials <b> show only when all sources fail */
   .lg.ico,.fav.ico{background:#fff;overflow:hidden;padding:0}
@@ -413,22 +414,23 @@ function brandDomainFromData(name){
 }
 // Walk the fallback list on each error; show initials/letter only when all sources fail.
 const LOGO_ONERR="var f=JSON.parse(this.dataset.fb||'[]');if(f.length){this.src=f.shift();this.dataset.fb=JSON.stringify(f);}else{this.parentNode.classList.add('fail');}";
-function logoChip(sources, inner, color, base){
-  const cls=base||'lg';
-  if(!sources.length) return `<span class="${cls}" style="background:${color}">${inner}</span>`;
-  return `<span class="${cls} ico" style="--fb:${color}"><img src="${esc(sources[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb='${esc(JSON.stringify(sources.slice(1)))}' onerror="${LOGO_ONERR}"><b>${inner}</b></span>`;
+function logoChip(sources, inner, color, base, title){
+  const cls=base||'lg', t=title?` title="${title}"`:'';
+  if(!sources.length) return `<span class="${cls}" style="background:${color}"${t}>${inner}</span>`;
+  return `<span class="${cls} ico" style="--fb:${color}"${t}><img src="${esc(sources[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb='${esc(JSON.stringify(sources.slice(1)))}' onerror="${LOGO_ONERR}"><b>${inner}</b></span>`;
 }
 function clientAvatar(c){
   const dom=hostOf(c.website||'');
   return logoChip(dom?domainSources(dom):[], esc(initials(c.name)), colorFor(c.name));
 }
-// Competitor brand: try a cited-source domain first, then logo.dev name lookup, else initials.
-function brandChip(name){
+// Logo sources for a brand NAME: cited-source domain first, then logo.dev name lookup.
+function brandSources(name){
   const dom=brandDomainFromData(name);
   const s=dom?domainSources(dom):[];
   if(LOGO_DEV_TOKEN) s.push(logodevImg('name/'+encodeURIComponent(name)));
-  return logoChip(s, esc(initials(name)), colorFor(name));
+  return s;
 }
+function brandChip(name){ return logoChip(brandSources(name), esc(initials(name)), colorFor(name)); }
 // Cited source chip (small), same chain, single-letter fallback.
 function favChip(urlOrHost){
   const dom=srcHost(urlOrHost);
@@ -782,7 +784,7 @@ function urlTitleCell(u){
   return `<div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1">${favChip(u)}
     <a class="urllink" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><b>${esc(host)}</b><span>${esc(u.replace(/^https?:\/\//,''))}</span></a></div>`;
 }
-function brandTag(name){ return `<span class="lg" style="width:20px;height:20px;font-size:9px;background:${colorFor(name)}" title="${esc(name)}">${esc(initials(name))}</span>`; }
+function brandTag(name){ return logoChip(brandSources(name), esc(initials(name)), colorFor(name), 'lg sm', esc(name)); }
 // Real page-content brand detection (from the crawl); falls back to the
 // answer-derived client proxy for pages not yet crawled.
 function mentionsCell(url, clientName, clientProxy){
