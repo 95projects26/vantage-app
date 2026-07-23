@@ -173,6 +173,12 @@
   .lg.ico.fail{background:var(--fb);border:none;padding:0}
   .lg.ico.fail img{display:none}
   .lg.ico.fail b{display:grid;place-items:center;width:100%;height:100%;color:#fff;font-weight:800}
+  .fav.ico{background:#fff;padding:2px;overflow:hidden}
+  .fav.ico img{width:100%;height:100%;object-fit:contain;display:block}
+  .fav.ico b{display:none}
+  .fav.ico.fail{background:var(--panel-2);padding:0}
+  .fav.ico.fail img{display:none}
+  .fav.ico.fail b{display:grid;place-items:center;width:100%;height:100%;color:var(--muted)}
   .mark img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
   tr.me td{background:var(--accent-weak)}
   tr.me .brandcell{color:var(--accent)}
@@ -399,6 +405,13 @@ function clientAvatar(c){
   const fav=faviconUrl(c.website);
   if(!fav) return `<span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>`;
   return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(fav)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.lg').classList.add('fail')"><b>${esc(initials(c.name))}</b></span>`;
+}
+// Small favicon chip for a cited URL/domain, with a letter fallback if it fails.
+function favChip(urlOrHost){
+  const fav=faviconUrl(urlOrHost);
+  const letter=esc(((srcHost(urlOrHost)||'?')[0]||'?').toUpperCase());
+  if(!fav) return `<span class="fav">${letter}</span>`;
+  return `<span class="fav ico"><img src="${esc(fav)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.fav').classList.add('fail')"><b>${letter}</b></span>`;
 }
 
 // ---------- AUTH ----------
@@ -667,7 +680,7 @@ function aggSources(rows){
   rows.forEach(r=>{ n++; new Set(r.cited_domains||[]).forEach(d=>cnt[d]=(cnt[d]||0)+1); });
   return Object.entries(cnt).map(([d,c])=>({d,p:Math.round(c/(n||1)*100)})).sort((a,b)=>b.p-a.p);
 }
-function srcLine(s){return `<div class="srcline"><span class="fav">${esc((s.d||'?')[0].toUpperCase())}</span><span class="dom">${esc(s.d)}</span>
+function srcLine(s){return `<div class="srcline">${favChip(s.d)}<span class="dom">${esc(s.d)}</span>
   <div class="bar" style="flex:1;max-width:150px"><i style="width:${s.p}%"></i></div><span class="pct tnum">${s.p}%</span></div>`;}
 function emptyClient(){return `<div class="note" style="max-width:560px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No results yet. This client will get data after the next daily run (6am ET), or its prompts were just added. Add prompts in the Prompts tab.</div>`;}
 
@@ -751,7 +764,7 @@ function aggUrlRows(rows){
 }
 function urlTitleCell(u){
   const host=srcHost(u);
-  return `<div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1"><span class="fav">${esc((host[0]||'?').toUpperCase())}</span>
+  return `<div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1">${favChip(u)}
     <a class="urllink" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><b>${esc(host)}</b><span>${esc(u.replace(/^https?:\/\//,''))}</span></a></div>`;
 }
 function brandTag(name){ return `<span class="lg" style="width:20px;height:20px;font-size:9px;background:${colorFor(name)}" title="${esc(name)}">${esc(initials(name))}</span>`; }
