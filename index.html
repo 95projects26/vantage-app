@@ -770,7 +770,8 @@ window.saveClient=async function(){
   if(error){ $('m_save').disabled=false; toast('Error: '+error.message); return; }
   if(prompts.length) await sb.from('prompts').insert(prompts.map(t=>({client_id:cl.id,text:t,kind: aliases.some(a=>t.toLowerCase().includes(a.toLowerCase()))?'branded':'unbranded'})));
   if(comps.length) await sb.from('competitors').insert(comps.map(n=>({client_id:cl.id,name:n})));
-  closeModal(); toast('Client added'); await loadAndRender();
+  closeModal(); toast('Client added'); await loadAll(); openClient(cl.id);
+  if(prompts.length) startRun(cl.id);   // run its prompts right away
 };
 window.addPromptModal=function(cid){
   openModal(`<h2>Add prompt</h2><div class="msub">A search to track for this client.</div>
@@ -783,7 +784,7 @@ window.savePrompt=async function(cid){
   $('p_save').disabled=true;
   const { error } = await sb.from('prompts').insert({client_id:cid,text,kind: aliases.some(a=>text.toLowerCase().includes(a.toLowerCase()))?'branded':'unbranded'});
   if(error){ $('p_save').disabled=false; toast('Error: '+error.message); return; }
-  closeModal(); toast('Prompt added'); await loadAndRender();
+  closeModal(); toast('Prompt added, running it now'); await loadAll(); render(); startRun(cid);
 };
 function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 window.deletePrompt=async function(id){
@@ -981,16 +982,17 @@ function renderPromptPage(){
       <div class="bd phist">${days}</div></div>`;
 }
 window.loadAndRender=async function(){ await loadAll(); render(); };
-window.runNow=async function(){
-  if(state.running) return;
-  const { error } = await sb.rpc('trigger_run');
+window.runNow=function(){ startRun(state.clientId); };
+async function startRun(cid){
+  if(state.running || !cid) return;
+  const { error } = await sb.rpc('trigger_run', { p_client: cid });
   if(error){ toast('Could not start run: '+error.message); return; }
   state.running=true; state.runStart=Date.now();
   const sinceIso = new Date(Date.now()-8000).toISOString();
-  toast('Run started — querying the models');
+  toast('Running the prompts now — about 1-2 minutes');
   render();
   pollRun(sinceIso, Date.now());
-};
+}
 function pollRun(sinceIso, started){
   const timer=setInterval(async ()=>{
     if(Date.now()-started > 6*60*1000){ clearInterval(timer); state.running=false; render(); toast('Run is taking longer than usual — hit Refresh shortly.'); return; }
