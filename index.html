@@ -834,6 +834,7 @@ function openModal(html){ $('modal-card').className='modal-card'; $('modal-card'
 window.addClientModal=function(){
   openModal(`<h2>Add client</h2><div class="msub">The daily run starts tracking it automatically.</div>
     <div class="fld"><label>Client name</label><input id="m_name" placeholder="Acme Corp"></div>
+    <div class="fld"><label>Website URL <span style="color:var(--danger,#e5484d)">*</span></label><div class="hint">Required. The client's main website.</div><input id="m_site" placeholder="https://acme.com"></div>
     <div class="fld"><label>Brand aliases</label><div class="hint">Names/domains that count as the client showing up, comma-separated.</div><input id="m_alias" placeholder="Acme, acme.com, Acme Inc"></div>
     <div class="fld"><label>Competitors</label><div class="hint">Optional, comma-separated.</div><input id="m_comp" placeholder="Rival One, Rival Two"></div>
     <div class="fld"><label>Prompts to track</label><div class="hint">One per line. The searches a buyer would type.</div><textarea id="m_prompts" rows="4" placeholder="best crm for startups
@@ -843,12 +844,17 @@ top project management tools"></textarea></div>
 };
 window.saveClient=async function(){
   const name=$('m_name').value.trim(); if(!name){toast('Name required');return;}
+  let site=$('m_site').value.trim(); if(!site){toast('Website URL required');$('m_site').focus();return;}
+  if(!/^https?:\/\//i.test(site)) site='https://'+site;
+  let host=''; try{ host=new URL(site).hostname.replace(/^www\./,''); }catch(e){ toast('Enter a valid website URL');$('m_site').focus();return; }
+  if(!host.includes('.')){ toast('Enter a valid website URL');$('m_site').focus();return; }
   const aliases=splitCsv($('m_alias').value); if(!aliases.includes(name)) aliases.unshift(name);
+  if(host && !aliases.some(a=>a.toLowerCase()===host)) aliases.push(host);   // client's own domain counts as showing up
   const comps=splitCsv($('m_comp').value);
   const prompts=$('m_prompts').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   $('m_save').disabled=true;
-  const { data:cl, error } = await sb.from('clients').insert({name,slug,aliases,status:$('m_status').value}).select().single();
+  const { data:cl, error } = await sb.from('clients').insert({name,slug,aliases,website:site,status:$('m_status').value}).select().single();
   if(error){ $('m_save').disabled=false; toast('Error: '+error.message); return; }
   if(prompts.length) await sb.from('prompts').insert(prompts.map(t=>({client_id:cl.id,text:t,kind: aliases.some(a=>t.toLowerCase().includes(a.toLowerCase()))?'branded':'unbranded'})));
   if(comps.length) await sb.from('competitors').insert(comps.map(n=>({client_id:cl.id,name:n})));
