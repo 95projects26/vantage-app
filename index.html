@@ -216,6 +216,14 @@
   .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--muted);font-weight:550}
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .legend i{width:10px;height:10px;border-radius:3px;flex:none}
+  .mscore{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:18px}
+  .mtile{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);position:relative}
+  .mtile .mt-top{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .mtile .mt-vis{font-size:26px;font-weight:680;letter-spacing:-.02em;line-height:1}
+  .mtile .mt-sub{font-size:11.5px;color:var(--faint);margin-top:5px}
+  .mtile .mt-tag{position:absolute;top:12px;right:12px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:20px}
+  .mread-lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:5px}
+  .mread-txt{font-size:13.5px;line-height:1.6;color:var(--text)}
   /* drawer */
   .drawer{position:fixed;inset:0;z-index:60}
   .drawer.hide{display:none}
@@ -1074,28 +1082,83 @@ window.genInsights=async function(cid){
 };
 
 // ---------- AI PERCEPTION ----------
+// per-model visibility + sentiment over the active window, across ALL models
+// (ignores the model filter on purpose — the scoreboard is a comparison).
+function modelStats(cid){
+  const all=clientResults(cid); if(!all.length) return [];
+  const md=all.reduce((m,r)=>r.run_date>m?r.run_date:m, all[0].run_date);
+  const start=shiftDate(md,-(state.windowDays-1));
+  const win=all.filter(r=>r.run_date>=start && r.run_date<=md);
+  return Object.entries(groupBy(win,'model')).map(([m,rs])=>{
+    const ment=rs.filter(r=>r.client_mentioned).length;
+    const sc={positive:0,neutral:0,negative:0}; rs.forEach(r=>{ if(r.client_mentioned&&sc[r.sentiment]!=null) sc[r.sentiment]++; });
+    return {m,total:rs.length,ment,vis:rs.length?Math.round(ment/rs.length*100):0,sc};
+  }).sort((a,b)=>b.vis-a.vis||b.ment-a.ment);
+}
+function modelScoreboard(stats){
+  if(!stats.length) return '';
+  const best=stats[0], worst=stats[stats.length-1];
+  const cards=stats.map(s=>{ const mb=MB(s.m);
+    const tag = (stats.length>1 && s.vis>0 && s===best) ? `<span class="mt-tag" style="color:var(--pos);background:var(--pos-weak)">Likes you most</span>`
+      : (stats.length>1 && s===worst && worst.vis<best.vis) ? `<span class="mt-tag" style="color:var(--neg);background:var(--neg-weak)">Weakest</span>` : '';
+    const sent = s.ment ? `${s.sc.positive?'<span class="chip pos" style="font-size:10px;padding:1px 7px">'+s.sc.positive+' pos</span>':''}${s.sc.negative?' <span class="chip neg" style="font-size:10px;padding:1px 7px">'+s.sc.negative+' neg</span>':''}` : '';
+    return `<div class="mtile">${tag}<div class="mt-top"><span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span>${mb.n}</span></div>
+      <div class="mt-vis tnum" style="color:${s.vis>=50?'var(--pos)':s.vis>0?'var(--text)':'var(--faint)'}">${s.vis}%</div>
+      <div class="mt-sub">${s.ment}/${s.total} answers mention you</div>
+      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">${sent||'<span class="chip off" style="font-size:10px;padding:1px 7px">no mentions</span>'}</div></div>`;
+  }).join('');
+  return `<div class="mscore">${cards}</div>`;
+}
+function modelReadCard(m, d, statsMap){
+  const mb=MB(m), st=statsMap[m], stance=((d&&d.stance)||'').toLowerCase();
+  const chip = stance==='strong'?['pos','Strong fit']:stance==='mixed'?['neu','Mixed']:stance==='weak'?['neu','Weak']:['off','Absent'];
+  return `<div class="card"><div class="hd"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span>${mb.n}</span><span class="chip ${chip[0]}">${chip[1]}</span>${st?`<span style="font-size:11.5px;color:var(--faint)">${st.vis}% · ${st.ment}/${st.total}</span>`:''}</div></div>
+    <div class="bd"><div class="mread-lab">What it values</div><div class="mread-txt">${esc((d&&d.values)||'—')}</div>
+      <div class="mread-lab" style="margin-top:12px">How to show up more here</div><div class="mread-txt">${esc((d&&d.recommendation)||'—')}</div></div></div>`;
+}
 function perceptionHTML(c){
   const p=clientPerception(c.id);
+  const bm=(p&&p.by_model)||{};
+  const stats=modelStats(c.id); const statsMap={}; stats.forEach(s=>statsMap[s.m]=s);
   const genBtn=`<button class="btn ghost" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Regenerate'}</button>`;
-  // sentiment score per day from mentioned results
+  const banner=state.insightsRunning?`<div class="runbanner"><span class="mini-spin"></span>Reading how each model describes this brand.</div>`:'';
+  // sentiment over time (respects the model filter)
   const rows=windowRows(c.id, state.windowDays).filter(r=>r.client_mentioned);
   const dates=[...new Set(rows.map(r=>r.run_date))].sort();
   const score=d=>{ const dr=rows.filter(r=>r.run_date===d); if(!dr.length) return null; const map={positive:100,neutral:55,negative:5};
     const vals=dr.map(r=>map[r.sentiment]).filter(v=>v!=null); return vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null; };
   const chart = dates.length>1 ? lineChart([{name:'Sentiment',color:'var(--accent)',data:dates.map(score)}], dates) : '';
   const sc={positive:0,neutral:0,negative:0}; rows.forEach(r=>{ if(sc[r.sentiment]!=null) sc[r.sentiment]++; });
-  const distro=`<div style="display:flex;gap:8px;margin-top:6px">
-    <span class="chip pos">${sc.positive} positive</span><span class="chip neu">${sc.neutral} neutral</span><span class="chip neg">${sc.negative} negative</span></div>`;
+  const distro=`<div style="display:flex;gap:8px;margin-top:6px"><span class="chip pos">${sc.positive} positive</span><span class="chip neu">${sc.neutral} neutral</span><span class="chip neg">${sc.negative} negative</span></div>`;
   const sentCard=`<div class="card"><div class="hd"><div><h3>Sentiment over time</h3><p>How favorably the models talk about ${esc(c.name)} when mentioned</p></div></div><div class="bd">${chart||'<div class="note">Not enough mentions yet for a trend.</div>'}${distro}</div></div>`;
-  if(!p) return `<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">AI Perception</div><div style="font-size:12.5px;color:var(--faint)">How ChatGPT and Claude characterize this brand.</div></div><div class="spacer"></div><button class="btn" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Generate perception'}</button></div>${state.insightsRunning?'<div class="runbanner"><span class="mini-spin"></span>Reading how the models describe this brand.</div>':''}<div class="note" style="max-width:560px;margin-bottom:16px">No perception summary yet. Click "Generate perception".</div>${sentCard}`;
-  const list=(arr,cls)=>arr.map(x=>`<div class="adet-must"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:${cls}"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg><div>${esc(x)}</div></div>`).join('');
-  return `<div style="display:flex;align-items:center;margin-bottom:14px"><div class="eyebrow">How AI perceives ${esc(c.name)} · updated ${fmtDate(p.generated_at)}</div><div class="spacer"></div>${genBtn}</div>
-    <div class="card" style="margin-bottom:16px"><div class="bd"><div style="font-size:14px;line-height:1.6">${esc(p.summary||'')}</div>
+
+  const header=`<div style="display:flex;align-items:center;margin-bottom:14px"><div class="eyebrow">How AI perceives ${esc(c.name)}${p&&p.generated_at?' · updated '+fmtDate(p.generated_at):''}</div><div class="spacer"></div>${genBtn}</div>`;
+  const scoreboard = stats.length? `<div class="eyebrow" style="margin-bottom:9px">Which models surface you · last ${state.windowDays} days</div>${modelScoreboard(stats)}` : '';
+
+  // focused single-model view when a specific model is picked in the top filter
+  const fm=state.modelFilter;
+  if(fm!=='all'){
+    const focus = bm[fm] ? modelReadCard(fm, bm[fm], statsMap)
+      : `<div class="note" style="max-width:560px">No per-model read for ${esc(MB(fm).n)} yet. Click Regenerate${p?'':' after generating perception'}.</div>`;
+    return header+banner+scoreboard+
+      `<div style="font-size:12px;color:var(--faint);margin:2px 0 10px">Showing ${esc(MB(fm).n)}. Switch the model filter to “All models” to compare every assistant.</div>`+
+      focus+`<div style="margin-top:16px">${sentCard}</div>`;
+  }
+
+  // all-models view: per-model read cards ordered by the scoreboard
+  const modelKeys=stats.map(s=>s.m).filter(m=>bm[m]).concat(Object.keys(bm).filter(m=>!statsMap[m]));
+  const perModel = modelKeys.length? `<div class="eyebrow" style="margin:20px 0 9px">What each model rewards, and how to win it</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">${modelKeys.map(m=>modelReadCard(m,bm[m],statsMap)).join('')}</div>` : '';
+
+  if(!p) return header+banner+scoreboard+`<div class="note" style="max-width:560px;margin-bottom:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No perception write-up yet. Click Regenerate to have Claude read how each model treats ${esc(c.name)}.</div>${sentCard}`;
+
+  const listItems=(arr,cls)=>arr.map(x=>`<div class="adet-must"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:${cls}"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg><div>${esc(x)}</div></div>`).join('');
+  return header+banner+scoreboard+
+    `<div class="card" style="margin-bottom:16px"><div class="bd"><div style="font-size:14px;line-height:1.6">${esc(p.summary||'')}</div>
       ${(p.keywords||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:14px">${(p.keywords||[]).map(k=>`<span class="dchip">${esc(k)}</span>`).join('')}</div>`:''}</div></div>
     <div class="grid two" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
-      <div class="card"><div class="hd"><div><h3 style="color:var(--pos)">Strengths</h3><p>What the models credit you for</p></div></div><div class="bd">${list(p.strengths||[],'var(--pos)')||'<div class="note">None noted.</div>'}</div></div>
-      <div class="card"><div class="hd"><div><h3 style="color:var(--neg)">Concerns</h3><p>Hesitations the models raise</p></div></div><div class="bd">${list(p.concerns||[],'var(--neg)')||'<div class="note">None noted.</div>'}</div></div>
-    </div>${sentCard}`;
+      <div class="card"><div class="hd"><div><h3 style="color:var(--pos)">Strengths</h3><p>What the models credit you for</p></div></div><div class="bd">${listItems(p.strengths||[],'var(--pos)')||'<div class="note">None noted.</div>'}</div></div>
+      <div class="card"><div class="hd"><div><h3 style="color:var(--neg)">Concerns</h3><p>Hesitations the models raise</p></div></div><div class="bd">${listItems(p.concerns||[],'var(--neg)')||'<div class="note">None noted.</div>'}</div></div>
+    </div>${perModel}<div style="margin-top:16px">${sentCard}</div>`;
 }
 
 // ---------- ROUTER ----------
