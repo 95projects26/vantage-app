@@ -76,6 +76,8 @@
     display:grid;place-items:center;font-weight:700;color:#fff;flex:none}
   .side .who .out{margin-left:auto;color:var(--faint);font-size:11.5px;font-weight:600;background:none;border:none}
   .side .who .out:hover{color:var(--neg)}
+  .attrib{display:block;padding:0 16px 14px;font-size:10px;color:var(--faint)}
+  .attrib:hover{color:var(--muted);text-decoration:underline}
   .main{min-width:0;display:flex;flex-direction:column}
   .topbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 82%,transparent);
     backdrop-filter:blur(8px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;padding:14px 26px;flex-wrap:wrap}
@@ -343,6 +345,7 @@
       <div id="uemail" style="overflow:hidden;text-overflow:ellipsis"></div>
       <button class="out" onclick="signOut()">Sign out</button>
     </div>
+    <a href="https://logo.dev" target="_blank" rel="noopener" class="attrib">Logos provided by Logo.dev</a>
   </aside>
   <main class="main">
     <div class="topbar" id="topbar"></div>
@@ -384,7 +387,7 @@ const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
 const LIVE_MODELS = ['openai','anthropic','perplexity','gemini']; // platforms with API keys configured (aio not yet built)
 // Paste your logo.dev PUBLISHABLE key (pk_...) here to use real brand logos (free tier).
 // It's a client-side publishable key, safe to ship. Empty = fall back to unavatar/favicon.
-const LOGO_DEV_TOKEN = '';
+const LOGO_DEV_TOKEN = 'pk_SuvgDcJXQKiDfTF06GjgCw';
 
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -409,7 +412,7 @@ function faviconUrl(website){
 function logoSources(website){
   let h; try{ h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname.replace(/^www\./,''); }catch{ return []; }
   const s=[];
-  if(LOGO_DEV_TOKEN) s.push(`https://img.logo.dev/${encodeURIComponent(h)}?token=${LOGO_DEV_TOKEN}&size=128&format=png&retina=true`);
+  if(LOGO_DEV_TOKEN) s.push(`https://img.logo.dev/${encodeURIComponent(h)}?token=${LOGO_DEV_TOKEN}&size=128&format=png&retina=true&fallback=404`);
   s.push(`https://unavatar.io/${encodeURIComponent(h)}?fallback=false`);
   s.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`);
   return s;
