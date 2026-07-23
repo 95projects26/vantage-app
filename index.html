@@ -96,6 +96,10 @@
   .rowbtn{width:28px;height:28px;border-radius:7px;border:1px solid transparent;background:none;color:var(--faint);display:inline-grid;place-items:center}
   .rowbtn:hover{color:var(--neg);background:var(--neg-weak);border-color:var(--neg-weak)}
   .rowbtn svg{width:15px;height:15px}
+  .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:2px}
+  .seg button{border:none;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px}
+  .seg button.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
+  .fsel{font-family:inherit;font-size:12.5px;font-weight:500;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:7px 9px;cursor:pointer}
   .content{padding:22px 26px 60px;max-width:1280px;width:100%}
   .grid{display:grid;gap:16px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
@@ -141,6 +145,13 @@
   .srcline .fav{width:20px;height:20px;border-radius:5px;background:var(--panel-2);border:1px solid var(--border);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--muted)}
   .srcline .dom{font-size:12.5px;font-weight:550;flex:none;width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .srcline .pct{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;width:44px;text-align:right}
+  .urlrow{display:flex;align-items:center;gap:9px;padding:9px 4px;border-top:1px solid var(--border)}
+  .urlrow:first-child{border-top:none}
+  .urlrow .fav{width:20px;height:20px;flex:none;border-radius:5px;background:var(--panel-2);border:1px solid var(--border);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--muted)}
+  .urllink{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+  .urllink b{font-size:12.5px;font-weight:600;color:var(--text)}
+  .urllink span{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .urllink:hover b{color:var(--accent)}
   .note{font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:7px;padding:9px 12px;border:1px dashed var(--border);border-radius:9px;background:var(--panel-2)}
   .note svg{width:14px;height:14px;flex:none}
   .clientgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
@@ -302,14 +313,15 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'' };
+const state = { clients:[], prompts:[], results:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'', windowDays:7, modelFilter:'all' };
+const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
 
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
 function initials(n){return (n||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||n.slice(0,2).toUpperCase();}
 function colorFor(s){let h=0;for(const c of (s||'')){h=(h*31+c.charCodeAt(0))>>>0;}return PALETTE[h%PALETTE.length];}
-const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:'Claude',c:'#D97757',i:'C'}:m==='perplexity'?{n:'Perplexity',c:'#20808D',i:'P'}:{n:'Gemini',c:'#4285F4',i:'G'};
+const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:'Claude',c:'#D97757',i:'C'}:m==='perplexity'?{n:'Perplexity',c:'#20808D',i:'P'}:m==='gemini'?{n:'Gemini',c:'#4285F4',i:'G'}:m==='aio'?{n:'Google AI Overviews',c:'#4285F4',i:'A'}:{n:m,c:'#6E7A93',i:'?'};
 const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:['off','No mention'];
 
 // ---------- AUTH ----------
@@ -336,22 +348,27 @@ async function loadAll(){
 }
 const clientResults = cid => state.results.filter(r=>r.client_id===cid);
 const clientPrompts = cid => state.prompts.filter(p=>p.client_id===cid);
+// results after applying the active model filter (used by all detail views)
+function viewResults(cid){ const rs=clientResults(cid);
+  return state.modelFilter==='all'? rs : rs.filter(r=>r.model===state.modelFilter); }
+function clientModels(cid){ return [...new Set(clientResults(cid).map(r=>r.model))]; }
 function latestRows(cid){
-  const rs=clientResults(cid); if(!rs.length) return [];
+  const rs=viewResults(cid); if(!rs.length) return [];
   const d=rs.reduce((m,r)=>r.run_date>m?r.run_date:m, rs[0].run_date);
   return rs.filter(r=>r.run_date===d);
 }
-function maxDate(cid){ const rs=clientResults(cid); return rs.length? rs.reduce((m,r)=>r.run_date>m?r.run_date:m, rs[0].run_date):null; }
+function maxDate(cid){ const rs=viewResults(cid); return rs.length? rs.reduce((m,r)=>r.run_date>m?r.run_date:m, rs[0].run_date):null; }
 function shiftDate(iso, deltaDays){ const [y,mo,d]=iso.split('-').map(Number);
   const dt=new Date(Date.UTC(y,mo-1,d)); dt.setUTCDate(dt.getUTCDate()+deltaDays); return dt.toISOString().slice(0,10); }
 function windowRows(cid, days){ const md=maxDate(cid); if(!md) return [];
-  const start=shiftDate(md, -(days-1)); return clientResults(cid).filter(r=>r.run_date>=start && r.run_date<=md); }
+  const start=shiftDate(md, -(days-1)); return viewResults(cid).filter(r=>r.run_date>=start && r.run_date<=md); }
 function promptKind(cid, text){
   const p=clientPrompts(cid).find(x=>x.text===text);
   return p?p.kind:'unbranded';
 }
 function summary(cid){
-  const rows=windowRows(cid,7);   // rolling 7-day window
+  const W=state.windowDays;
+  const rows=windowRows(cid,W);   // rolling window (7/14/30 days)
   const total=rows.length;
   const ment=rows.filter(r=>r.client_mentioned).length;
   const unb=rows.filter(r=>promptKind(cid,r.prompt_text)!=='branded');
@@ -381,8 +398,8 @@ function summary(cid){
   const md=maxDate(cid);
   let prevVis=null;
   if(md){
-    const ps=shiftDate(md,-13), pe=shiftDate(md,-7);
-    const pr=clientResults(cid).filter(r=>r.run_date>=ps && r.run_date<=pe);
+    const ps=shiftDate(md,-(2*W-1)), pe=shiftDate(md,-W);
+    const pr=viewResults(cid).filter(r=>r.run_date>=ps && r.run_date<=pe);
     prevVis = pr.length? Math.round(pr.filter(r=>r.client_mentioned).length/pr.length*100):null;
   }
   const dayCount=new Set(rows.map(r=>r.run_date)).size;
@@ -450,7 +467,7 @@ function renderClient(){
   const titles={overview:'Overview',prompts:'Prompts',answers:'All answers',competitors:'Competitors',sources:'Cited sources'};
   $('topbar').innerHTML = `<div><div class="crumb"><a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b></div><div class="h1">${titles[state.tab]}</div></div>
     <div class="spacer"></div>
-    <div class="pill-select"><b>${clientResults(c.id).length? new Set(clientResults(c.id).map(r=>r.model)).size : 0}</b> models</div>
+    ${filterControls(c.id)}
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`;
   const tabbar = `<div class="tabs">`+
@@ -605,7 +622,7 @@ function answerCard(r){
 }
 function promptHistory(cid, text){
   const byDate={};
-  clientResults(cid).filter(r=>r.prompt_text===text).forEach(r=>{ (byDate[r.run_date]=byDate[r.run_date]||[]).push(r); });
+  viewResults(cid).filter(r=>r.prompt_text===text).forEach(r=>{ (byDate[r.run_date]=byDate[r.run_date]||[]).push(r); });
   return Object.keys(byDate).sort().reverse().map(d=>({date:d, rows:byDate[d].sort((a,b)=>a.model.localeCompare(b.model))}));
 }
 window.openPrompt = function(cid, encText, showAll){
@@ -718,7 +735,19 @@ window.deleteClient=async function(id){
 };
 
 // ---------- ROUTER ----------
-window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null;} render(); };
+function filterControls(cid){
+  const have=clientModels(cid);
+  const opts=`<option value="all"${state.modelFilter==='all'?' selected':''}>All models</option>`+
+    CANON_MODELS.map(m=>{ const on=have.includes(m); return `<option value="${m}"${state.modelFilter===m?' selected':''}${on?'':' disabled'}>${MB(m).n}${on?'':' (no key)'}</option>`;}).join('');
+  const seg=`<div class="seg">${[7,14,30].map(d=>`<button class="${state.windowDays===d?'on':''}" onclick="setWindow(${d})">${d}d</button>`).join('')}</div>`;
+  return seg+`<select class="fsel" onchange="setModel(this.value)">${opts}</select>`;
+}
+window.setWindow=function(d){ state.windowDays=d; render(); };
+window.setModel=function(m){ state.modelFilter=m; render(); };
+function aggUrls(rows){ const cnt={}; const n=rows.length;
+  rows.forEach(r=>{ new Set(r.cited_urls||[]).forEach(u=>cnt[u]=(cnt[u]||0)+1); });
+  return Object.entries(cnt).map(([u,c])=>({u,c,pct:Math.round(c/(n||1)*100)})).sort((a,b)=>b.c-a.c); }
+window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
 window.openClient=function(id){ state.view='client'; state.clientId=id; state.tab='overview'; render(); };
 window.setTab=function(t){ state.view='client'; state.tab=t; render(); };
 function render(){ renderNav();
@@ -730,13 +759,16 @@ function render(){ renderNav();
 function renderPromptPage(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
   const text=state.promptText;
-  const hist=promptHistory(c.id, text);
+  // rows for this prompt within the active window + model filter, grouped by day
+  const wrows=windowRows(c.id, state.windowDays).filter(r=>r.prompt_text===text);
+  const byDate={}; wrows.forEach(r=>{ (byDate[r.run_date]=byDate[r.run_date]||[]).push(r); });
+  const hist=Object.keys(byDate).sort().reverse().map(d=>({date:d, rows:byDate[d].sort((a,b)=>a.model.localeCompare(b.model))}));
   $('topbar').innerHTML=`<div style="min-width:0"><div class="crumb"><a onclick="go('clients')">Clients</a> / <a onclick="openClient('${c.id}')">${esc(c.name)}</a> / <b>Prompt history</b></div><div class="h1">${esc(text)}</div></div>
     <div class="spacer"></div>
-    <button class="btn ghost" onclick="openClient('${c.id}')">${'<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M15 18l-6-6 6-6\"/></svg>'} Back to ${esc(c.name)}</button>`;
-  if(!hist.length){ $('content').innerHTML=`<div class="note">No history yet for this prompt.</div>`; return; }
+    ${filterControls(c.id)}
+    <button class="btn ghost" onclick="openClient('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> Back</button>`;
+  if(!hist.length){ $('content').innerHTML=`<div class="note">No results for this prompt in the selected window / model.</div>`; return; }
   const latest=hist[0], lm=latest.rows.filter(r=>r.client_mentioned).length;
-  // per-day mention rate strip (oldest -> newest)
   const strip=hist.slice().reverse().map(d=>{ const m=d.rows.filter(r=>r.client_mentioned).length, t=d.rows.length;
     const pct=t?Math.round(m/t*100):0; const col=pct>0?'var(--pos)':'var(--border)';
     return `<div title="${esc(d.date)}: ${m}/${t}" style="flex:1;min-width:14px;display:flex;flex-direction:column;align-items:center;gap:4px">
@@ -746,14 +778,27 @@ function renderPromptPage(){
     `<div class="dayhead"><span>${esc(day.date)}</span>${i===0?'<span class="daynow">latest</span>':''}<span class="daycount">${day.rows.filter(r=>r.client_mentioned).length}/${day.rows.length} mentioned</span></div>`
     + day.rows.map(answerCard).join('')
   ).join('');
+  // per-prompt sources over the window
+  const domSrc=aggSources(wrows), urlSrc=aggUrls(wrows);
+  const domHTML = domSrc.length? domSrc.slice(0,15).map(srcLine).join('') : `<div class="note">No citations captured.</div>`;
+  const host=u=>{ try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u;} };
+  const urlHTML = urlSrc.length? urlSrc.slice(0,20).map(s=>
+    `<div class="urlrow"><span class="fav">${esc((host(s.u)[0]||'?').toUpperCase())}</span>
+      <a class="urllink" href="${esc(s.u)}" target="_blank" rel="noopener" title="${esc(s.u)}"><b>${esc(host(s.u))}</b><span>${esc(s.u.replace(/^https?:\/\//,''))}</span></a>
+      <span class="tnum" style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap">${s.c}× · ${s.pct}%</span></div>`).join('')
+    : `<div class="note">No source URLs captured.</div>`;
   $('content').innerHTML=`
     <div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:640px">
-      ${tile('Days tracked', String(hist.length), `since ${esc(hist[hist.length-1].date)}`, 'var(--accent)')}
+      ${tile('Days tracked', String(hist.length), `last ${state.windowDays} days`, 'var(--accent)')}
       ${tile('Latest', `${lm}/${latest.rows.length}`, `mentioned on ${esc(latest.date)}`, lm?'var(--pos)':'var(--neg)')}
       ${tile('Prompt type', promptKind(c.id,text)==='branded'?'Branded':'Unbranded', 'buyer intent', 'var(--s2)')}
     </div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Mention rate over time</h3><p>Share of models mentioning ${esc(c.name)} each day</p></div></div>
       <div class="bd"><div style="display:flex;gap:6px;align-items:flex-end;height:80px">${strip}</div></div></div>
+    <div class="grid two" style="grid-template-columns:1fr 1.4fr;margin-top:16px">
+      <div class="card"><div class="hd"><div><h3>Domain sources</h3><p>How often each domain is cited on this prompt</p></div></div><div class="bd">${domHTML}</div></div>
+      <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages the models pulled from</p></div></div><div class="bd">${urlHTML}</div></div>
+    </div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every answer over time</h3><p>Newest first, grouped by day</p></div></div>
       <div class="bd phist">${days}</div></div>`;
 }
