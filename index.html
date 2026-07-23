@@ -658,10 +658,24 @@ function competitorsHTML(c){
       <td class="tnum">${b.c} of ${denom}</td><td style="width:150px"><div style="display:flex;align-items:center;gap:8px"><div class="bar" style="max-width:110px"><i style="width:${Math.round(b.c/denom*100)}%;background:${colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px">${Math.round(b.c/denom*100)}%</span></div></td></tr>`).join('')}
     </tbody></table></div></div>`;
 }
+function srcHost(u){ try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u;} }
+function urlRowHTML(s){
+  return `<div class="urlrow"><span class="fav">${esc((srcHost(s.u)[0]||'?').toUpperCase())}</span>
+    <a class="urllink" href="${esc(s.u)}" target="_blank" rel="noopener" title="${esc(s.u)}"><b>${esc(srcHost(s.u))}</b><span>${esc(s.u.replace(/^https?:\/\//,''))}</span></a>
+    <span class="tnum" style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap">${s.c}× · ${s.pct}%</span></div>`;
+}
+function sourcesPanels(rows, scope){
+  const dom=aggSources(rows), urls=aggUrls(rows);
+  const domHTML=dom.length? dom.slice(0,25).map(srcLine).join('') : `<div class="note">No citations captured.</div>`;
+  const urlHTML=urls.length? urls.slice(0,30).map(urlRowHTML).join('') : `<div class="note">No source URLs captured.</div>`;
+  return `<div class="grid two" style="grid-template-columns:1fr 1.4fr">
+    <div class="card"><div class="hd"><div><h3>Domain sources</h3><p>How often each domain is cited ${scope}</p></div></div><div class="bd">${domHTML}</div></div>
+    <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>The exact pages models pull from — roundups and lists to get featured in</p></div></div><div class="bd">${urlHTML}</div></div></div>`;
+}
 function sourcesHTML(c){
-  const src=aggSources(latestRows(c.id));
-  if(!src.length) return `<div class="note">No citations captured yet.</div>`;
-  return `<div class="card"><div class="hd"><div><h3>Cited domains</h3><p>How often each domain is pulled into answers</p></div></div><div class="bd">${src.map(srcLine).join('')}</div></div>`;
+  const rows=windowRows(c.id, state.windowDays);
+  if(!rows.length) return `<div class="note">No citations captured yet.</div>`;
+  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · last ${state.windowDays} days</div>`+sourcesPanels(rows,'across all prompts');
 }
 
 // ---------- DRAWER (prompt history over time) ----------
