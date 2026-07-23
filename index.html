@@ -91,6 +91,11 @@
   .btn.ghost{background:var(--panel);color:var(--text);border:1px solid var(--border);box-shadow:none}
   .btn:disabled{opacity:.55;cursor:default}
   .btn svg{width:15px;height:15px}
+  .btn.danger{background:var(--neg);color:#fff;box-shadow:none}
+  .btn.danger:hover{filter:brightness(.94)}
+  .rowbtn{width:28px;height:28px;border-radius:7px;border:1px solid transparent;background:none;color:var(--faint);display:inline-grid;place-items:center}
+  .rowbtn:hover{color:var(--neg);background:var(--neg-weak);border-color:var(--neg-weak)}
+  .rowbtn svg{width:15px;height:15px}
   .content{padding:22px 26px 60px;max-width:1280px;width:100%}
   .grid{display:grid;gap:16px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
@@ -352,9 +357,12 @@ function summary(cid){
     if(r.client_mentioned && client) brands.add(client.name);
     for(const b of brands) brandCount[b]=(brandCount[b]||0)+1;
   }
-  const board=Object.entries(brandCount).map(([n,c])=>({n,c})).sort((a,b)=>b.c-a.c);
+  const fullBoard=Object.entries(brandCount).map(([n,c])=>({n,c})).sort((a,b)=>b.c-a.c);
+  const board=fullBoard.slice(0,50);   // rank among the top 50 competitors, not the whole long tail
   const denom=unb.length||1;
   let rank=board.findIndex(b=>client&&b.n===client.name); rank = rank<0?null:rank+1;
+  const clientInUnbranded=unb.some(r=>r.client_mentioned);
+  const totalBrands=fullBoard.length;
   // sentiment
   const sc={positive:0,neutral:0,negative:0};
   rows.forEach(r=>{ if(r.sentiment&&sc[r.sentiment]!=null) sc[r.sentiment]++; });
@@ -373,7 +381,7 @@ function summary(cid){
     total, vis: total?Math.round(ment/total*100):0,
     unbVis: unb.length?Math.round(unbMent/unb.length*100):0,
     board, denom, rank, sentLabel, sc, promptCount: clientPrompts(cid).length,
-    days: dates.length, prevVis, prevDate,
+    days: dates.length, prevVis, prevDate, clientInUnbranded, totalBrands,
   };
 }
 
@@ -398,6 +406,7 @@ function listIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="current
 function peopleIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M15 20a4 4 0 0 1 6 0"/></svg>';}
 function linkIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';}
 function chatIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-6.5A8 8 0 1 1 21 12z"/></svg>';}
+function trashIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>';}
 function backIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 18l-6-6 6-6"/></svg>';}
 function chev(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>';}
 
@@ -456,8 +465,8 @@ function overviewHTML(c){
   const visSub = s.prevVis!=null
     ? `${mented} of ${rows.length} today · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% (${s.prevDate})`
     : `Appeared in ${mented} of ${rows.length} responses`;
-  const sovSub = s.rank ? `of ${s.board.length} brands on unbranded prompts`
-    : (s.board.length ? `not named · ${s.board.length} brands seen` : 'no unbranded data');
+  const sovSub = s.rank ? `of ${s.board.length} brands (top 50 tracked)`
+    : (s.clientInUnbranded ? `outside the top 50 of ${s.totalBrands}` : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data'));
   const tiles = `<div class="tiles">
     ${tile('AI Visibility', s.vis+'%', visSub, 'var(--accent)')}
     ${tile('Unbranded visibility', s.unbVis+'%', 'Buyer-intent prompts. The gap to close.', s.unbVis<40?'var(--neg)':'var(--pos)', s.unbVis<40?'var(--neg)':null)}
@@ -546,13 +555,18 @@ function promptsHTML(c){
     const body=arr.map(p=>{
       const rs=byPrompt[p.text]||[]; const vis=rs.length?Math.round(rs.filter(r=>r.client_mentioned).length/rs.length*100):null;
       return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')"><td style="max-width:340px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
-        <td class="tnum">${vis==null?'—':vis+'%'}</td><td><span class="chip pos dot" style="font-size:10.5px">Active</span></td></tr>`;
+        <td class="tnum">${vis==null?'—':vis+'%'}</td><td><span class="chip pos dot" style="font-size:10.5px">Active</span></td>
+        <td style="width:38px;text-align:right"><button class="rowbtn" title="Delete prompt" onclick="event.stopPropagation();deletePrompt('${p.id}')">${trashIcon()}</button></td></tr>`;
     }).join('');
-    return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Status</th></tr></thead><tbody>${body}</tbody></table>`;
+    return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   }
   return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${new Set(rows.map(r=>r.model)).size||0} models</div><div class="spacer" style="flex:1"></div>
     <button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
-    <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>`;
+    <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>
+    <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
+      <div><div style="font-weight:600;font-size:13px">Danger zone</div><div style="font-size:12px;color:var(--faint)">Deleting a client removes all of its prompts and history permanently.</div></div>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn danger" onclick="deleteClient('${c.id}')">${trashIcon()}Delete client</button></div>`;
 }
 function competitorsHTML(c){
   const rows=latestRows(c.id).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
@@ -674,6 +688,19 @@ window.savePrompt=async function(cid){
   closeModal(); toast('Prompt added'); await loadAndRender();
 };
 function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
+window.deletePrompt=async function(id){
+  if(!confirm('Delete this prompt? It stops being tracked from the next run on. Past results stay in history.')) return;
+  const { error } = await sb.from('prompts').delete().eq('id', id);
+  if(error){ toast('Error: '+error.message); return; }
+  toast('Prompt deleted'); await loadAndRender();
+};
+window.deleteClient=async function(id){
+  const c=state.clients.find(x=>x.id===id); const nm=c?c.name:'this client';
+  if(!confirm('Delete "'+nm+'" and ALL of its prompts, answers and history? This cannot be undone.')) return;
+  const { error } = await sb.from('clients').delete().eq('id', id);
+  if(error){ toast('Error: '+error.message); return; }
+  toast('Client deleted'); go('clients'); await loadAll(); render();
+};
 
 // ---------- ROUTER ----------
 window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null;} render(); };
