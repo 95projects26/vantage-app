@@ -359,6 +359,7 @@ const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], 
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
+const LIVE_MODELS = ['openai','anthropic','perplexity','gemini']; // platforms with API keys configured (aio not yet built)
 
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -872,7 +873,7 @@ function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);
 window.clientSettingsModal=function(cid){
   const c=state.clients.find(x=>x.id===cid); if(!c) return;
   const models=c.models||['openai','anthropic'];
-  const have=['openai','anthropic','perplexity','gemini']; // platforms with live keys
+  const have=LIVE_MODELS;
   const modelBox=CANON_MODELS.map(m=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;${have.includes(m)?'':'opacity:.5'}">
     <input type="checkbox" data-model="${m}" ${models.includes(m)?'checked':''} ${have.includes(m)?'':'disabled'}> ${MB(m).n}${have.includes(m)?'':' (no key)'}</label>`).join('');
   const acctBlock = c.status==='pitch'
@@ -1099,9 +1100,11 @@ function perceptionHTML(c){
 
 // ---------- ROUTER ----------
 function filterControls(cid){
-  const have=clientModels(cid);
+  const have=clientModels(cid);   // models that actually have data for this client
   const opts=`<option value="all"${state.modelFilter==='all'?' selected':''}>All models</option>`+
-    CANON_MODELS.map(m=>{ const on=have.includes(m); return `<option value="${m}"${state.modelFilter===m?' selected':''}${on?'':' disabled'}>${MB(m).n}${on?'':' (no key)'}</option>`;}).join('');
+    CANON_MODELS.map(m=>{ const on=have.includes(m);
+      const suffix = on ? '' : (LIVE_MODELS.includes(m) ? ' (no data yet)' : ' (no key)');
+      return `<option value="${m}"${state.modelFilter===m?' selected':''}${on?'':' disabled'}>${MB(m).n}${suffix}</option>`;}).join('');
   const seg=`<div class="seg">${[7,14,30].map(d=>`<button class="${state.windowDays===d?'on':''}" onclick="setWindow(${d})">${d}d</button>`).join('')}</div>`;
   return seg+`<select class="fsel" onchange="setModel(this.value)">${opts}</select>`;
 }
