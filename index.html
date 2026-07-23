@@ -401,10 +401,12 @@ function faviconUrl(website){
 }
 // Avatar for a client: real website favicon if we have one, else initials chip.
 // The initials sit behind the favicon and show only if the icon fails to load.
-// Real brand logo (Clearbit) → favicon (Google) → initials. All free, no key.
+// Best-available logo (unavatar aggregates apple-touch-icon / social / etc, ~128px)
+// → Google favicon → initials. All free, no key.
 function logoSources(website){
   let h; try{ h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname.replace(/^www\./,''); }catch{ return []; }
-  return [`https://logo.clearbit.com/${h}`, `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`];
+  return [`https://unavatar.io/${encodeURIComponent(h)}?fallback=false`,
+          `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`];
 }
 function clientAvatar(c){
   const srcs=c.website?logoSources(c.website):[];
