@@ -434,12 +434,12 @@ function summary(cid){
     if(r.client_mentioned && client) brands.add(client.name);
     for(const b of brands) brandCount[b]=(brandCount[b]||0)+1;
   }
-  const fullBoard=Object.entries(brandCount).map(([n,c])=>({n,c})).sort((a,b)=>b.c-a.c);
-  const board=fullBoard.slice(0,50);   // rank among the top 50 competitors, not the whole long tail
+  // one SoV definition, shared with the Competitor Analysis tab: rank among ALL
+  // brands named on unbranded prompts; % = share of unbranded answers naming each.
+  const board=Object.entries(brandCount).map(([n,c])=>({n,c})).sort((a,b)=>b.c-a.c);
   const denom=unb.length||1;
   let rank=board.findIndex(b=>client&&b.n===client.name); rank = rank<0?null:rank+1;
-  const clientInUnbranded=unb.some(r=>r.client_mentioned);
-  const totalBrands=fullBoard.length;
+  const totalBrands=board.length;
   // sentiment
   const sc={positive:0,neutral:0,negative:0};
   rows.forEach(r=>{ if(r.sentiment&&sc[r.sentiment]!=null) sc[r.sentiment]++; });
@@ -460,7 +460,7 @@ function summary(cid){
     total, mentioned: ment, vis: total?Math.round(ment/total*100):0,
     unbVis: unb.length?Math.round(unbMent/unb.length*100):0,
     board, denom, rank, sentLabel, sc, promptCount: clientPrompts(cid).length,
-    dayCount, windowEnd: md, prevVis, clientInUnbranded, totalBrands,
+    dayCount, windowEnd: md, prevVis, totalBrands,
   };
 }
 
@@ -551,8 +551,8 @@ function overviewHTML(c){
   const visSub = s.prevVis!=null
     ? `${s.mentioned} of ${s.total} over ${dLbl} · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
     : `${s.mentioned} of ${s.total} responses over ${dLbl}`;
-  const sovSub = s.rank ? `of ${s.board.length} brands (top 50 tracked)`
-    : (s.clientInUnbranded ? `outside the top 50 of ${s.totalBrands}` : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data'));
+  const sovSub = s.rank ? `of ${s.totalBrands} brands named`
+    : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data');
   const tiles = `<div class="eyebrow" style="margin-bottom:11px">Rolling ${state.windowDays}-day window · through ${esc(s.windowEnd||'')}</div><div class="tiles">
     ${tile('AI Visibility', s.vis+'%', visSub, 'var(--accent)')}
     ${tile('Unbranded visibility', s.unbVis+'%', 'Buyer-intent prompts. The gap to close.', s.unbVis<40?'var(--neg)':'var(--pos)', s.unbVis<40?'var(--neg)':null)}
@@ -794,7 +794,7 @@ window.closeDrawer=()=>$('drawer').classList.add('hide');
 
 // full chronological feed of every answer
 function answersHTML(c){
-  const rows=clientResults(c.id);
+  const rows=viewResults(c.id);   // respects the active model filter
   if(!rows.length) return emptyClient();
   const byDate=groupBy(rows,'run_date');
   const dates=Object.keys(byDate).sort().reverse();
@@ -951,7 +951,7 @@ function actionsTabHTML(c){
 function topCited(cid){
   const md=maxDate(cid); if(!md) return [];
   const start=shiftDate(md,-29);
-  const cnt={}; clientResults(cid).filter(r=>r.run_date>=start).forEach(r=>{ (r.cited_urls||[]).forEach(u=>{cnt[u]=(cnt[u]||0)+1;}); });
+  const cnt={}; viewResults(cid).filter(r=>r.run_date>=start).forEach(r=>{ (r.cited_urls||[]).forEach(u=>{cnt[u]=(cnt[u]||0)+1;}); });
   return Object.entries(cnt).map(([u,c])=>({u,c})).sort((a,b)=>b.c-a.c).slice(0,8);
 }
 window.openAction=async function(id){
