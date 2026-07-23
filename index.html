@@ -100,6 +100,14 @@
   .seg button{border:none;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px}
   .seg button.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
   .fsel{font-family:inherit;font-size:12.5px;font-weight:500;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:7px 9px;cursor:pointer}
+  .actcard{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow)}
+  .actbody{flex:1;min-width:0}
+  .acttop{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  .acttitle{font-weight:600;font-size:14px;line-height:1.35;margin-top:6px}
+  .actrat{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .actev{font-size:11.5px;color:var(--faint);margin-top:7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis}
+  .actbtns{display:flex;gap:8px;align-items:center;flex:none}
+  .catchip{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
   .content{padding:22px 26px 60px;max-width:1280px;width:100%}
   .grid{display:grid;gap:16px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
@@ -313,7 +321,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'', windowDays:7, modelFilter:'all' };
+const state = { clients:[], prompts:[], results:[], actions:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'', windowDays:7, modelFilter:'all', genRunning:false };
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
 
 const $ = id => document.getElementById(id);
@@ -338,16 +346,18 @@ window.signOut = async function(){ await sb.auth.signOut(); location.reload(); }
 
 // ---------- DATA ----------
 async function loadAll(){
-  const [c,p,r] = await Promise.all([
+  const [c,p,r,a] = await Promise.all([
     sb.from('clients').select('*').order('created_at'),
     sb.from('prompts').select('*'),
     sb.from('results').select('*').order('run_date',{ascending:false}),
+    sb.from('actions').select('*').order('created_at',{ascending:false}),
   ]);
   if(c.error||p.error||r.error){ toast('Load error: '+((c.error||p.error||r.error).message)); }
-  state.clients=c.data||[]; state.prompts=p.data||[]; state.results=r.data||[];
+  state.clients=c.data||[]; state.prompts=p.data||[]; state.results=r.data||[]; state.actions=a.data||[];
 }
 const clientResults = cid => state.results.filter(r=>r.client_id===cid);
 const clientPrompts = cid => state.prompts.filter(p=>p.client_id===cid);
+const clientActions = cid => (state.actions||[]).filter(a=>a.client_id===cid);
 // results after applying the active model filter (used by all detail views)
 function viewResults(cid){ const rs=clientResults(cid);
   return state.modelFilter==='all'? rs : rs.filter(r=>r.model===state.modelFilter); }
@@ -419,7 +429,7 @@ function renderNav(){
   } else {
     const c=state.clients.find(x=>x.id===state.clientId);
     nav.innerHTML = '<div class="navlbl">'+esc(c?c.name:'')+'</div>'+
-      ['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'answers','Answers',chatIcon(),'competitors','Competitors',peopleIcon(),'sources','Cited sources',linkIcon()]
+      ['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'answers','Answers',chatIcon(),'actions','Actions',boltIcon(),'competitors','Competitors',peopleIcon(),'sources','Cited sources',linkIcon()]
       .reduce((acc,_,i,a)=> i%3===0? acc+navTab(a[i],a[i+1],a[i+2]) : acc, '') +
       '<div class="navsec" style="padding:0"><button class="navitem" onclick="go(\'clients\')" style="margin-top:8px">'+backIcon()+'All clients</button></div>';
   }
@@ -432,6 +442,7 @@ function listIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="current
 function peopleIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M15 20a4 4 0 0 1 6 0"/></svg>';}
 function linkIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>';}
 function chatIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-6.5A8 8 0 1 1 21 12z"/></svg>';}
+function boltIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z"/></svg>';}
 function trashIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>';}
 function backIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 18l-6-6 6-6"/></svg>';}
 function chev(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>';}
@@ -464,19 +475,20 @@ function renderClients(){
 // ---------- RENDER: client detail ----------
 function renderClient(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
-  const titles={overview:'Overview',prompts:'Prompts',answers:'All answers',competitors:'Competitors',sources:'Cited sources'};
+  const titles={overview:'Overview',prompts:'Prompts',answers:'All answers',actions:'Actions',competitors:'Competitors',sources:'Cited sources'};
   $('topbar').innerHTML = `<div><div class="crumb"><a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b></div><div class="h1">${titles[state.tab]}</div></div>
     <div class="spacer"></div>
     ${filterControls(c.id)}
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`;
   const tabbar = `<div class="tabs">`+
-    ['overview','Overview','prompts','Prompts','answers','Answers','competitors','Competitors','sources','Cited sources']
+    ['overview','Overview','prompts','Prompts','answers','Answers','actions','Actions','competitors','Competitors','sources','Cited sources']
     .reduce((a,_,i,arr)=> i%2===0? a+`<button class="tab ${state.tab===arr[i]?'on':''}" onclick="setTab('${arr[i]}')">${arr[i+1]}</button>`:a,'')+`</div>`;
   let body='';
   if(state.tab==='overview') body=overviewHTML(c);
   else if(state.tab==='prompts') body=promptsHTML(c);
   else if(state.tab==='answers') body=answersHTML(c);
+  else if(state.tab==='actions') body=actionsTabHTML(c);
   else if(state.tab==='competitors') body=competitorsHTML(c);
   else if(state.tab==='sources') body=sourcesHTML(c);
   const banner = state.running ? `<div class="runbanner"><span class="mini-spin"></span>Running a fresh check across ChatGPT + Claude. This takes about 2 to 3 minutes; results update here automatically.</div>` : '';
@@ -732,6 +744,52 @@ window.deleteClient=async function(id){
   const { error } = await sb.from('clients').delete().eq('id', id);
   if(error){ toast('Error: '+error.message); return; }
   toast('Client deleted'); go('clients'); await loadAll(); render();
+};
+
+// ---------- ACTIONS ----------
+const CAT={create:['Create content','var(--accent)'],update:['Update content','var(--neu)'],editorial:['Editorial','var(--s2)']};
+function catChip(cat){ const x=CAT[cat]||CAT.create; return `<span class="catchip" style="color:${x[1]};background:color-mix(in srgb,${x[1]} 13%,transparent)">${x[0]}</span>`; }
+function statusSelect(a){ const opts=[['todo','To do'],['in_progress','In progress'],['done','Done']];
+  return `<select class="fsel" style="padding:4px 8px;font-size:11.5px" onchange="setActionStatus('${a.id}',this.value)">${opts.map(o=>`<option value="${o[0]}"${a.status===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select>`; }
+function actionsTabHTML(c){
+  const acts=clientActions(c.id);
+  const suggested=acts.filter(a=>a.status==='suggested');
+  const active=acts.filter(a=>['todo','in_progress','done'].includes(a.status));
+  const genBtn=`<button class="btn" onclick="genActions('${c.id}')" ${state.genRunning?'disabled':''}>${state.genRunning?'<span class="mini-spin"></span>Generating…':boltIcon()+'Generate recommendations'}</button>`;
+  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Recommended actions</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">What to build or earn to start showing up in AI answers, derived from the prompts you're absent on and the sources the models cite instead.</div></div><div class="spacer" style="flex:1"></div>${genBtn}</div>`;
+  const banner=state.genRunning?`<div class="runbanner"><span class="mini-spin"></span>Analyzing your gaps and writing recommendations. About a minute; they'll appear here automatically.</div>`:'';
+  if(!acts.length) return intro+banner+`<div class="note" style="max-width:560px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No recommendations yet. Click "Generate recommendations" and Vantage will analyze this client's gaps.</div>`;
+  function card(a, accepted){
+    return `<div class="actcard"><div class="actbody"><div class="acttop">${catChip(a.category)}${accepted?statusSelect(a):''}</div>
+      <div class="acttitle">${esc(a.title)}</div>
+      ${a.rationale?`<div class="actrat">${esc(a.rationale)}</div>`:''}
+      ${a.evidence?`<div class="actev">↳ ${esc(a.evidence)}</div>`:''}</div>
+      <div class="actbtns">${accepted
+        ? `<button class="rowbtn" title="Delete" onclick="deleteAction('${a.id}')">${trashIcon()}</button>`
+        : `<button class="btn ghost" style="padding:6px 12px" onclick="rejectAction('${a.id}')">Reject</button><button class="btn" style="padding:6px 12px" onclick="acceptAction('${a.id}')">Accept</button>`}</div></div>`;
+  }
+  const sug=suggested.length?`<div class="promptgroup">Suggested (${suggested.length})</div>${suggested.map(a=>card(a,false)).join('')}`:'';
+  const act=active.length?`<div class="promptgroup">Accepted (${active.length})</div>${active.map(a=>card(a,true)).join('')}`:'';
+  return intro+banner+`<div style="display:flex;flex-direction:column;gap:10px">${sug}${act}</div>`;
+}
+async function updateAction(id,patch){ const {error}=await sb.from('actions').update(patch).eq('id',id); if(error){toast('Error: '+error.message);return;} await loadAll(); render(); }
+window.acceptAction=id=>updateAction(id,{status:'todo'});
+window.rejectAction=id=>updateAction(id,{status:'rejected'});
+window.setActionStatus=(id,s)=>updateAction(id,{status:s});
+window.deleteAction=async function(id){ if(!confirm('Delete this action?'))return; const {error}=await sb.from('actions').delete().eq('id',id); if(error){toast('Error: '+error.message);return;} toast('Deleted'); await loadAll(); render(); };
+window.genActions=async function(cid){
+  if(state.genRunning) return;
+  const {error}=await sb.rpc('trigger_actions',{p_client:cid});
+  if(error){ toast('Could not start: '+error.message); return; }
+  state.genRunning=true; toast('Generating recommendations'); render();
+  const before=clientActions(cid)[0]?.created_at||'';
+  const started=Date.now();
+  const timer=setInterval(async ()=>{
+    await loadAll();
+    const newest=clientActions(cid)[0]?.created_at||'';
+    if(newest>before){ clearInterval(timer); state.genRunning=false; render(); toast('New recommendations added'); return; }
+    if(Date.now()-started>110000){ clearInterval(timer); state.genRunning=false; render(); toast('Done. If nothing new appeared, your gaps are already covered.'); }
+  }, 9000);
 };
 
 // ---------- ROUTER ----------
