@@ -575,9 +575,9 @@ function overviewHTML(c){
       <div class="pr">${esc(r.prompt_text)}</div><div class="txt">${esc(snippet)}…</div>
       <span class="viewcue">Read full answer${chev()}</span></div>`;
   }).join('');
-  // sources
-  const src=aggSources(rows);
-  const srcHTML = src.length? src.slice(0,7).map(ssrc=>srcLine(ssrc)).join('') : `<div class="note">No citations captured yet.</div>`;
+  // source URLs (the actionable ones), over the active window
+  const urls=aggUrls(windowRows(c.id, state.windowDays));
+  const srcHTML = urls.length? urls.slice(0,8).map(urlRowHTML).join('') : `<div class="note">No source URLs captured yet.</div>`;
   return tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
       <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Where you win and lose, per model</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
@@ -585,7 +585,7 @@ function overviewHTML(c){
     </div>
     <div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
       <div class="card"><div class="hd"><div><h3>Latest AI answers</h3><p>Latest run · ${esc(rows[0].run_date)}</p></div><div class="spacer" style="flex:1"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('answers')">View all ${chev()}</button></div><div class="bd">${ans}</div></div>
-      <div class="card"><div class="hd"><div><h3>Top cited sources</h3><p>Domains the AIs pulled from</p></div></div><div class="bd">${srcHTML}</div></div>
+      <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — get featured here</p></div><div class="spacer" style="flex:1"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('sources')">View all ${chev()}</button></div><div class="bd">${srcHTML}</div></div>
     </div>`;
 }
 function tile(lab,val,sub,strip,valColor,fs){
