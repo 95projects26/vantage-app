@@ -382,6 +382,9 @@ const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id==
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
 const LIVE_MODELS = ['openai','anthropic','perplexity','gemini']; // platforms with API keys configured (aio not yet built)
+// Paste your logo.dev PUBLISHABLE key (pk_...) here to use real brand logos (free tier).
+// It's a client-side publishable key, safe to ship. Empty = fall back to unavatar/favicon.
+const LOGO_DEV_TOKEN = '';
 
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -401,18 +404,22 @@ function faviconUrl(website){
 }
 // Avatar for a client: real website favicon if we have one, else initials chip.
 // The initials sit behind the favicon and show only if the icon fails to load.
-// Best-available logo (unavatar aggregates apple-touch-icon / social / etc, ~128px)
-// → Google favicon → initials. All free, no key.
+// Logo source chain, best → fallback: logo.dev (real brand logos, if a token is set)
+// → unavatar (aggregated ~128px) → Google favicon → initials. All free.
 function logoSources(website){
   let h; try{ h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname.replace(/^www\./,''); }catch{ return []; }
-  return [`https://unavatar.io/${encodeURIComponent(h)}?fallback=false`,
-          `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`];
+  const s=[];
+  if(LOGO_DEV_TOKEN) s.push(`https://img.logo.dev/${encodeURIComponent(h)}?token=${LOGO_DEV_TOKEN}&size=128&format=png&retina=true`);
+  s.push(`https://unavatar.io/${encodeURIComponent(h)}?fallback=false`);
+  s.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`);
+  return s;
 }
+// Walk the source list on each load error; show the initials chip only when all fail.
+const LOGO_ONERR="var f=JSON.parse(this.dataset.fb||'[]');if(f.length){this.src=f.shift();this.dataset.fb=JSON.stringify(f);}else{this.closest('.lg').classList.add('fail');}";
 function clientAvatar(c){
   const srcs=c.website?logoSources(c.website):[];
   if(!srcs.length) return `<span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>`;
-  const onerr="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.closest('.lg').classList.add('fail');}";
-  return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(srcs[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb="${esc(srcs[1])}" onerror="${onerr}"><b>${esc(initials(c.name))}</b></span>`;
+  return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(srcs[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb='${esc(JSON.stringify(srcs.slice(1)))}' onerror="${LOGO_ONERR}"><b>${esc(initials(c.name))}</b></span>`;
 }
 // Small favicon chip for a cited URL/domain, with a letter fallback if it fails.
 function favChip(urlOrHost){
