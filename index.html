@@ -428,48 +428,54 @@ function promptKind(cid, text){
   const p=clientPrompts(cid).find(x=>x.text===text);
   return p?p.kind:'unbranded';
 }
+function sentLabelOf(sc){
+  const t=sc.positive+sc.neutral+sc.negative;
+  if(!t) return 'No data';
+  if(sc.positive&&sc.negative) return 'Mixed';
+  if(sc.positive>=sc.negative && sc.positive>=sc.neutral) return 'Positive';
+  if(sc.negative>sc.positive) return 'Negative';
+  return 'Mixed';
+}
 function summary(cid){
   const W=state.windowDays;
   const rows=windowRows(cid,W);   // rolling window (7/14/30 days)
-  const total=rows.length;
-  const ment=rows.filter(r=>r.client_mentioned).length;
-  const unb=rows.filter(r=>promptKind(cid,r.prompt_text)!=='branded');
-  const unbMent=unb.filter(r=>r.client_mentioned).length;
-  // share of voice among unbranded
   const client=state.clients.find(c=>c.id===cid);
+  // VISIBILITY / MENTIONS use UNBRANDED (buyer-intent) prompts only. Branded prompts
+  // ("is X good?") almost always name the client, so counting them inflates the number.
+  const unb=rows.filter(r=>promptKind(cid,r.prompt_text)!=='branded');
+  const branded=rows.filter(r=>promptKind(cid,r.prompt_text)==='branded');
+  const unbMent=unb.filter(r=>r.client_mentioned).length;
+  // share of voice among unbranded (shared definition with Competitor Analysis)
   const brandCount={};
   for(const r of unb){
     const brands=new Set([...(r.other_brands||[]),...(r.competitors_mentioned||[])]);
     if(r.client_mentioned && client) brands.add(client.name);
     for(const b of brands) brandCount[b]=(brandCount[b]||0)+1;
   }
-  // one SoV definition, shared with the Competitor Analysis tab: rank among ALL
-  // brands named on unbranded prompts; % = share of unbranded answers naming each.
   const board=Object.entries(brandCount).map(([n,c])=>({n,c})).sort((a,b)=>b.c-a.c);
   const denom=unb.length||1;
   let rank=board.findIndex(b=>client&&b.n===client.name); rank = rank<0?null:rank+1;
   const totalBrands=board.length;
-  // sentiment
-  const sc={positive:0,neutral:0,negative:0};
-  rows.forEach(r=>{ if(r.sentiment&&sc[r.sentiment]!=null) sc[r.sentiment]++; });
-  let sentLabel='No data';
-  const sentTotal=sc.positive+sc.neutral+sc.negative;
-  if(sentTotal){ sentLabel = (sc.positive>=sc.negative && sc.positive>=sc.neutral)?'Positive': (sc.negative>sc.positive)?'Negative':'Mixed';
-    if(sc.positive&&sc.negative) sentLabel='Mixed'; }
-  // trend: this window vs the prior window of equal length
+  // sentiment: branded = direct reputation ("what they say when asked about you");
+  // unbranded-when-mentioned = how you're portrayed when you surface in buyer searches.
+  const tally=list=>{ const sc={positive:0,neutral:0,negative:0}; list.forEach(r=>{ if(r.sentiment&&sc[r.sentiment]!=null) sc[r.sentiment]++; }); return sc; };
+  const bsc=tally(branded);
+  const usc=tally(unb.filter(r=>r.client_mentioned));
+  // trend: unbranded visibility this window vs the prior window of equal length
   const md=maxDate(cid);
   let prevVis=null;
   if(md){
     const ps=shiftDate(md,-(2*W-1)), pe=shiftDate(md,-W);
-    const pr=viewResults(cid).filter(r=>r.run_date>=ps && r.run_date<=pe);
-    prevVis = pr.length? Math.round(pr.filter(r=>r.client_mentioned).length/pr.length*100):null;
+    const pu=viewResults(cid).filter(r=>r.run_date>=ps && r.run_date<=pe && promptKind(cid,r.prompt_text)!=='branded');
+    prevVis = pu.length? Math.round(pu.filter(r=>r.client_mentioned).length/pu.length*100):null;
   }
   const dayCount=new Set(rows.map(r=>r.run_date)).size;
   return {
-    total, mentioned: ment, vis: total?Math.round(ment/total*100):0,
-    unbVis: unb.length?Math.round(unbMent/unb.length*100):0,
-    board, denom, rank, sentLabel, sc, promptCount: clientPrompts(cid).length,
-    dayCount, windowEnd: md, prevVis, totalBrands,
+    unbTotal: unb.length, unbMent, vis: unb.length?Math.round(unbMent/unb.length*100):0,
+    board, denom, rank, totalBrands,
+    bsc, bSentLabel: sentLabelOf(bsc), brandedCount: branded.length,
+    usc, uSentLabel: sentLabelOf(usc),
+    promptCount: clientPrompts(cid).length, dayCount, windowEnd: md, prevVis,
   };
 }
 
@@ -518,7 +524,7 @@ function renderClients(){
       <div class="row1"><span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>
         <div><div class="nm">${esc(c.name)}</div><span class="tag" style="color:${tagc};background:color-mix(in srgb,${tagc} 14%,transparent)">${esc(c.status)}</span></div></div>
       <div class="stats">
-        <div class="stat"><div class="k">Visibility</div><div class="v tnum">${s.total?s.vis+'%':'—'}</div></div>
+        <div class="stat"><div class="k">Visibility</div><div class="v tnum">${s.unbTotal?s.vis+'%':'—'}</div></div>
         <div class="stat"><div class="k">SoV rank</div><div class="v tnum">${s.rank?('#'+s.rank):'—'}</div></div>
         <div class="stat"><div class="k">Prompts</div><div class="v tnum">${s.promptCount}</div></div>
       </div></button>`;
@@ -558,15 +564,18 @@ function overviewHTML(c){
   const s=summary(c.id);
   const dLbl=`${s.dayCount} day${s.dayCount>1?'s':''}`;
   const visSub = s.prevVis!=null
-    ? `${s.mentioned} of ${s.total} over ${dLbl} · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
-    : `${s.mentioned} of ${s.total} responses over ${dLbl}`;
+    ? `${s.unbMent} of ${s.unbTotal} buyer-intent answers · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
+    : `${s.unbMent} of ${s.unbTotal} buyer-intent answers over ${dLbl}`;
   const sovSub = s.rank ? `of ${s.totalBrands} brands named`
     : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data');
-  const tiles = `<div class="eyebrow" style="margin-bottom:11px">Rolling ${state.windowDays}-day window · through ${esc(s.windowEnd||'')}</div><div class="tiles">
-    ${tile('AI Visibility', s.vis+'%', visSub, 'var(--accent)')}
-    ${tile('Unbranded visibility', s.unbVis+'%', 'Buyer-intent prompts. The gap to close.', s.unbVis<40?'var(--neg)':'var(--pos)', s.unbVis<40?'var(--neg)':null)}
+  const uTot=s.usc.positive+s.usc.neutral+s.usc.negative;
+  const repSub = s.brandedCount ? `${s.bsc.positive} pos · ${s.bsc.neutral} neu · ${s.bsc.negative} neg` : 'no branded prompts';
+  const uSentSub = uTot ? `${s.usc.positive} pos · ${s.usc.neutral} neu · ${s.usc.negative} neg` : 'no unbranded mentions yet';
+  const tiles = `<div class="eyebrow" style="margin-bottom:11px">Rolling ${state.windowDays}-day window · visibility on buyer-intent prompts · through ${esc(s.windowEnd||'')}</div><div class="tiles">
+    ${tile('AI Visibility', s.unbTotal? s.vis+'%':'—', visSub, s.unbTotal&&s.vis<40?'var(--neg)':'var(--accent)', s.unbTotal&&s.vis<40?'var(--neg)':null)}
     ${tile('Share of voice', s.rank?('#'+s.rank):'—', sovSub, 'var(--s2)')}
-    ${tile('Sentiment', s.sentLabel, `${s.sc.positive} pos · ${s.sc.neutral} neu · ${s.sc.negative} neg`, 'var(--neu)', null, 22)}
+    ${tile('Branded reputation', s.brandedCount? s.bSentLabel:'—', repSub, 'var(--neu)', null, 22)}
+    ${tile('Sentiment when found', uTot? s.uSentLabel:'—', uSentSub, 'var(--pos)', null, 22)}
   </div>`;
   // share of voice table
   const board=s.board.slice(0,7);
@@ -1090,9 +1099,10 @@ function modelStats(cid){
   const start=shiftDate(md,-(state.windowDays-1));
   const win=all.filter(r=>r.run_date>=start && r.run_date<=md);
   return Object.entries(groupBy(win,'model')).map(([m,rs])=>{
-    const ment=rs.filter(r=>r.client_mentioned).length;
-    const sc={positive:0,neutral:0,negative:0}; rs.forEach(r=>{ if(r.client_mentioned&&sc[r.sentiment]!=null) sc[r.sentiment]++; });
-    return {m,total:rs.length,ment,vis:rs.length?Math.round(ment/rs.length*100):0,sc};
+    const unb=rs.filter(r=>promptKind(cid,r.prompt_text)!=='branded');  // visibility = unbranded
+    const ment=unb.filter(r=>r.client_mentioned).length;
+    const sc={positive:0,neutral:0,negative:0}; rs.forEach(r=>{ if(r.client_mentioned&&sc[r.sentiment]!=null) sc[r.sentiment]++; });  // sentiment from all mentions
+    return {m,total:unb.length,ment,vis:unb.length?Math.round(ment/unb.length*100):0,sc};
   }).sort((a,b)=>b.vis-a.vis||b.ment-a.ment);
 }
 function modelScoreboard(stats){
@@ -1104,7 +1114,7 @@ function modelScoreboard(stats){
     const sent = s.ment ? `${s.sc.positive?'<span class="chip pos" style="font-size:10px;padding:1px 7px">'+s.sc.positive+' pos</span>':''}${s.sc.negative?' <span class="chip neg" style="font-size:10px;padding:1px 7px">'+s.sc.negative+' neg</span>':''}` : '';
     return `<div class="mtile">${tag}<div class="mt-top"><span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span>${mb.n}</span></div>
       <div class="mt-vis tnum" style="color:${s.vis>=50?'var(--pos)':s.vis>0?'var(--text)':'var(--faint)'}">${s.vis}%</div>
-      <div class="mt-sub">${s.ment}/${s.total} answers mention you</div>
+      <div class="mt-sub">${s.ment}/${s.total} buyer-intent answers</div>
       <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">${sent||'<span class="chip off" style="font-size:10px;padding:1px 7px">no mentions</span>'}</div></div>`;
   }).join('');
   return `<div class="mscore">${cards}</div>`;
