@@ -206,6 +206,8 @@
   .promptgroup{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:650;padding:14px 4px 6px}
   tr.clk{cursor:pointer}
   tr.clk:hover td{background:var(--panel-2)}
+  .urlrow.clk{cursor:pointer;border-radius:8px}
+  .urlrow.clk:hover{background:var(--panel-2)}
   .viewcue{font-size:11px;color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:3px}
   .viewcue svg{width:12px;height:12px}
   .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--muted);font-weight:550}
@@ -656,7 +658,7 @@ function overviewHTML(c){
   }).join('');
   // source URLs (the actionable ones), over the active window
   const urls=aggUrlRows(windowRows(c.id, state.windowDays));
-  const srcHTML = urls.length? urls.slice(0,8).map(urlRowHTML).join('') : `<div class="note">No source URLs captured yet.</div>`;
+  const srcHTML = urls.length? urls.slice(0,8).map(s=>urlRowHTML(s, c.id)).join('') : `<div class="note">No source URLs captured yet.</div>`;
   return tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
       <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Where you win and lose, per model</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
@@ -782,7 +784,7 @@ function aggUrlRows(rows){
 function urlTitleCell(u){
   const host=srcHost(u);
   return `<div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1">${favChip(u)}
-    <a class="urllink" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><b>${esc(host)}</b><span>${esc(u.replace(/^https?:\/\//,''))}</span></a></div>`;
+    <a class="urllink" onclick="event.stopPropagation()" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}"><b>${esc(host)}</b><span>${esc(u.replace(/^https?:\/\//,''))}</span></a></div>`;
 }
 function brandTag(name){ return logoChip(brandSources(name), esc(initials(name)), colorFor(name), 'lg sm', esc(name)); }
 // Real page-content brand detection (from the crawl); falls back to the
@@ -798,10 +800,10 @@ function mentionsCell(url, clientName, clientProxy){
   const extra = brands.length - chips.length;
   return `<div style="display:flex;align-items:center;gap:4px;justify-content:center">${chips.join('')}${extra>0?`<span style="font-size:11px;color:var(--faint);font-weight:600">+${extra}</span>`:''}</div>`;
 }
-function urlTableHTML(rows, clientName){
+function urlTableHTML(rows, clientName, cid){
   const list=aggUrlRows(rows);
   if(!list.length) return `<div class="note">No source URLs captured.</div>`;
-  const body=list.slice(0,40).map(s=>`<tr>
+  const body=list.slice(0,40).map(s=>`<tr class="clk" onclick="openSource('${cid}','${encodeURIComponent(s.u)}')">
     <td>${urlTitleCell(s.u)}</td>
     <td style="text-align:center;width:82px">${mentionsCell(s.u, clientName, s.client)}</td>
     <td class="tnum" style="text-align:right;width:52px;font-weight:600">${s.used}</td>
@@ -809,20 +811,20 @@ function urlTableHTML(rows, clientName){
   return `<table><thead><tr><th>URL</th><th style="text-align:center">Mentions</th><th style="text-align:right">Used</th><th style="text-align:right">Avg. citations</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 // compact single-line rows for narrow cards (overview)
-function urlRowHTML(s){
-  return `<div class="urlrow">${urlTitleCell(s.u)}<span class="tnum" style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap;flex:none">${s.used} used · ${s.avg.toFixed(1)} avg</span></div>`;
+function urlRowHTML(s, cid){
+  return `<div class="urlrow clk" onclick="openSource('${cid}','${encodeURIComponent(s.u)}')">${urlTitleCell(s.u)}<span class="tnum" style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap;flex:none">${s.used} used · ${s.avg.toFixed(1)} avg</span></div>`;
 }
-function sourcesPanels(rows, scope, clientName){
+function sourcesPanels(rows, scope, c){
   const dom=aggSources(rows);
   const domHTML=dom.length? dom.slice(0,25).map(srcLine).join('') : `<div class="note">No citations captured.</div>`;
   return `<div class="grid two" style="grid-template-columns:1fr 1.7fr">
     <div class="card"><div class="hd"><div><h3>Domain sources</h3><p>How often each domain is cited ${scope}</p></div></div><div class="bd">${domHTML}</div></div>
-    <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — get featured here</p></div></div><div class="bd" style="overflow-x:auto">${urlTableHTML(rows, clientName)}</div></div></div>`;
+    <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — click one to see the answers it shaped</p></div></div><div class="bd" style="overflow-x:auto">${urlTableHTML(rows, c.name, c.id)}</div></div></div>`;
 }
 function sourcesHTML(c){
   const rows=windowRows(c.id, state.windowDays);
   if(!rows.length) return `<div class="note">No citations captured yet.</div>`;
-  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · last ${state.windowDays} days</div>`+sourcesPanels(rows,'across all prompts', c.name);
+  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · last ${state.windowDays} days</div>`+sourcesPanels(rows,'across all prompts', c);
 }
 
 // ---------- DRAWER (prompt history over time) ----------
@@ -851,7 +853,23 @@ window.openPrompt = function(cid, encText, showAll){
   if(hist.length>5)
     html += `<button class="btn ghost" style="align-self:center;margin-top:4px" onclick="openPromptPage('${cid}','${encText}')">View all ${hist.length} days &rarr;</button>`;
   $('drawer-bd').innerHTML=html;
-  document.getElementById('drawer-viewall').onclick=()=>openPromptPage(cid, encText);
+  const va=document.getElementById('drawer-viewall'); va.style.display=''; va.onclick=()=>openPromptPage(cid, encText);
+  $('drawer').classList.remove('hide'); $('drawer-bd').scrollTop=0;
+};
+// Drawer of every answer that cited a given source URL (which prompts, which models, full answers).
+window.openSource=function(cid, encUrl){
+  const url=decodeURIComponent(encUrl);
+  const rows=viewResults(cid).filter(r=>(r.cited_urls||[]).includes(url))
+    .sort((a,b)=> b.run_date.localeCompare(a.run_date) || a.model.localeCompare(b.model));
+  if(!rows.length) return;
+  $('drawer-q').textContent=srcHost(url);
+  const models=[...new Set(rows.map(r=>r.model))].map(m=>MB(m).n);
+  const prompts=new Set(rows.map(r=>r.prompt_text));
+  $('drawer-sub').innerHTML=`Cited in ${rows.length} answer${rows.length>1?'s':''} across ${prompts.size} prompt${prompts.size>1?'s':''} &middot; ${models.join(', ')}`;
+  document.getElementById('drawer-viewall').style.display='none';
+  $('drawer-bd').innerHTML=rows.map(r=>
+    `<div class="dayhead"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.prompt_text)}</span><span class="daycount">${esc(r.run_date)}</span></div>`+answerCard(r)
+  ).join('');
   $('drawer').classList.remove('hide'); $('drawer-bd').scrollTop=0;
 };
 window.openPromptPage=function(cid, encText){
@@ -1266,7 +1284,7 @@ function renderPromptPage(){
   // per-prompt sources over the window
   const domSrc=aggSources(wrows);
   const domHTML = domSrc.length? domSrc.slice(0,15).map(srcLine).join('') : `<div class="note">No citations captured.</div>`;
-  const urlHTML = urlTableHTML(wrows, c.name);
+  const urlHTML = urlTableHTML(wrows, c.name, c.id);
   $('content').innerHTML=`
     <div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:640px">
       ${tile('Days tracked', String(hist.length), `last ${state.windowDays} days`, 'var(--accent)')}
