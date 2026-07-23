@@ -401,10 +401,16 @@ function faviconUrl(website){
 }
 // Avatar for a client: real website favicon if we have one, else initials chip.
 // The initials sit behind the favicon and show only if the icon fails to load.
+// Real brand logo (Clearbit) → favicon (Google) → initials. All free, no key.
+function logoSources(website){
+  let h; try{ h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname.replace(/^www\./,''); }catch{ return []; }
+  return [`https://logo.clearbit.com/${h}`, `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`];
+}
 function clientAvatar(c){
-  const fav=faviconUrl(c.website);
-  if(!fav) return `<span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>`;
-  return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(fav)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.lg').classList.add('fail')"><b>${esc(initials(c.name))}</b></span>`;
+  const srcs=c.website?logoSources(c.website):[];
+  if(!srcs.length) return `<span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>`;
+  const onerr="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.closest('.lg').classList.add('fail');}";
+  return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(srcs[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb="${esc(srcs[1])}" onerror="${onerr}"><b>${esc(initials(c.name))}</b></span>`;
 }
 // Small favicon chip for a cited URL/domain, with a letter fallback if it fails.
 function favChip(urlOrHost){
