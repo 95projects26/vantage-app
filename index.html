@@ -398,38 +398,54 @@ const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:
 const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:['off','No mention'];
 // Group rows into { key -> [rows] } by a field name.
 function groupBy(rows, key){ const m={}; rows.forEach(r=>{ (m[r[key]]=m[r[key]]||[]).push(r); }); return m; }
-// Free client favicon from the site's domain (Google's service, no key / no cost).
-function faviconUrl(website){
-  if(!website) return null;
-  try{ const h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname;
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=64`; }
-  catch{ return null; }
+// ---- Brand logos: logo.dev (real logos) → unavatar → Google favicon → initials. All free.
+function hostOf(website){
+  try{ return new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname.replace(/^www\./,''); }catch{ return null; }
 }
-// Avatar for a client: real website favicon if we have one, else initials chip.
-// The initials sit behind the favicon and show only if the icon fails to load.
-// Logo source chain, best → fallback: logo.dev (real brand logos, if a token is set)
-// → unavatar (aggregated ~128px) → Google favicon → initials. All free.
-function logoSources(website){
-  let h; try{ h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname.replace(/^www\./,''); }catch{ return []; }
+function logodevImg(path){ return `https://img.logo.dev/${path}?token=${LOGO_DEV_TOKEN}&size=128&format=png&retina=true&fallback=404`; }
+function domainSources(dom){
   const s=[];
-  if(LOGO_DEV_TOKEN) s.push(`https://img.logo.dev/${encodeURIComponent(h)}?token=${LOGO_DEV_TOKEN}&size=128&format=png&retina=true&fallback=404`);
-  s.push(`https://unavatar.io/${encodeURIComponent(h)}?fallback=false`);
-  s.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=128`);
+  if(LOGO_DEV_TOKEN) s.push(logodevImg(encodeURIComponent(dom)));
+  s.push(`https://unavatar.io/${encodeURIComponent(dom)}?fallback=false`);
+  s.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(dom)}&sz=128`);
   return s;
 }
-// Walk the source list on each load error; show the initials chip only when all fail.
-const LOGO_ONERR="var f=JSON.parse(this.dataset.fb||'[]');if(f.length){this.src=f.shift();this.dataset.fb=JSON.stringify(f);}else{this.closest('.lg').classList.add('fail');}";
-function clientAvatar(c){
-  const srcs=c.website?logoSources(c.website):[];
-  if(!srcs.length) return `<span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>`;
-  return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(srcs[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb='${esc(JSON.stringify(srcs.slice(1)))}' onerror="${LOGO_ONERR}"><b>${esc(initials(c.name))}</b></span>`;
+// Best-effort domain for a competitor brand, pulled from OUR OWN cited-source data
+// (no API, no tokens): match the brand name to a domain the models already cited.
+function brandDomainFromData(name){
+  const key=(name||'').toLowerCase().replace(/[^a-z0-9]/g,''); if(key.length<5) return null;
+  const seen=new Set();
+  for(const r of state.results){ for(const d of (r.cited_domains||[])){
+    const dom=(d||'').replace(/^www\./,'').toLowerCase(); if(!dom||seen.has(dom)) continue; seen.add(dom);
+    const label=(dom.split('.')[0]||'').replace(/[^a-z0-9]/g,''); if(label.length<5) continue;
+    if(key===label || key.startsWith(label) || label.startsWith(key)) return dom;
+  } }
+  return null;
 }
-// Small favicon chip for a cited URL/domain, with a letter fallback if it fails.
+// Walk the fallback list on each error; show initials/letter only when all sources fail.
+const LOGO_ONERR="var f=JSON.parse(this.dataset.fb||'[]');if(f.length){this.src=f.shift();this.dataset.fb=JSON.stringify(f);}else{this.parentNode.classList.add('fail');}";
+function logoChip(sources, inner, color, base){
+  const cls=base||'lg';
+  if(!sources.length) return `<span class="${cls}" style="background:${color}">${inner}</span>`;
+  return `<span class="${cls} ico" style="--fb:${color}"><img src="${esc(sources[0])}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb='${esc(JSON.stringify(sources.slice(1)))}' onerror="${LOGO_ONERR}"><b>${inner}</b></span>`;
+}
+function clientAvatar(c){
+  const dom=hostOf(c.website||'');
+  return logoChip(dom?domainSources(dom):[], esc(initials(c.name)), colorFor(c.name));
+}
+// Competitor brand: try a cited-source domain first, then logo.dev name lookup, else initials.
+function brandChip(name){
+  const dom=brandDomainFromData(name);
+  const s=dom?domainSources(dom):[];
+  if(LOGO_DEV_TOKEN) s.push(logodevImg('name/'+encodeURIComponent(name)));
+  return logoChip(s, esc(initials(name)), colorFor(name));
+}
+// Cited source chip (small), same chain, single-letter fallback.
 function favChip(urlOrHost){
-  const fav=faviconUrl(urlOrHost);
-  const letter=esc(((srcHost(urlOrHost)||'?')[0]||'?').toUpperCase());
-  if(!fav) return `<span class="fav">${letter}</span>`;
-  return `<span class="fav ico"><img src="${esc(fav)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.fav').classList.add('fail')"><b>${letter}</b></span>`;
+  const dom=srcHost(urlOrHost);
+  const letter=esc(((dom||'?')[0]||'?').toUpperCase());
+  const s=(dom&&dom.includes('.'))?domainSources(dom):[];
+  return logoChip(s, letter, 'var(--panel-2)', 'fav');
 }
 
 // ---------- AUTH ----------
@@ -635,7 +651,7 @@ function overviewHTML(c){
   const sov = board.length? `<table><tbody>${board.map((b,i)=>{
     const me=b.n===c.name;
     return `<tr class="${me?'me':''}"><td class="rank tnum">${i+1}</td>
-      <td><div class="brandcell"><span class="lg" style="background:${me?'var(--accent)':colorFor(b.n)}">${esc(initials(b.n))}</span>${esc(b.n)}</div></td>
+      <td><div class="brandcell">${me?clientAvatar(c):brandChip(b.n)}${esc(b.n)}</div></td>
       <td style="width:120px"><div style="display:flex;align-items:center;gap:8px"><div class="bar"><i style="width:${Math.round(b.c/s.denom*100)}%;background:${me?'var(--accent)':colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px;font-weight:600">${Math.round(b.c/s.denom*100)}%</span></div></td></tr>`;
   }).join('')}</tbody></table>` : `<div class="note">No unbranded prompts yet.</div>`;
   // prompt performance
@@ -759,7 +775,7 @@ function competitorsHTML(c){
   const chart = dates.length>1 ? lineChart(series,dates) : `<div class="note">Need 2+ days of data for the trend, check back after the next run.</div>`;
   const legend = `<div class="legend" style="margin-top:12px">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`;
   const table=`<table><thead><tr><th>#</th><th>Brand</th><th>Visibility</th><th>Share of voice</th></tr></thead><tbody>${board.slice(0,15).map((b,i)=>{ const mine=b.n===c.name;
-    return `<tr class="${mine?'me':''}"><td class="rank tnum">${i+1}</td><td><div class="brandcell"><span class="lg" style="background:${mine?'var(--accent)':colorFor(b.n)}">${esc(initials(b.n))}</span>${esc(b.n)}${mine?' <span class="chip pos" style="font-size:10px;padding:1px 7px">you</span>':''}</div></td>
+    return `<tr class="${mine?'me':''}"><td class="rank tnum">${i+1}</td><td><div class="brandcell">${mine?clientAvatar(c):brandChip(b.n)}${esc(b.n)}${mine?' <span class="chip pos" style="font-size:10px;padding:1px 7px">you</span>':''}</div></td>
       <td class="tnum" style="font-weight:600">${b.vis}%</td>
       <td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><div class="bar" style="max-width:120px"><i style="width:${b.vis}%;background:${mine?'var(--accent)':colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px">${b.vis}%</span></div></td></tr>`;}).join('')}</tbody></table>`;
   return `<div class="eyebrow" style="margin-bottom:12px">You vs. competitors · unbranded prompts · last ${state.windowDays} days</div>
