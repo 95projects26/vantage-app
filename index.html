@@ -195,6 +195,7 @@
   .dayhead:first-child{border-top:none;margin-top:0;padding-top:0}
   .dayhead .daynow{font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-weak);padding:2px 7px;border-radius:20px}
   .dayhead .daycount{margin-left:auto;font-size:11px;font-weight:600;color:var(--faint)}
+  .phist{display:flex;flex-direction:column;gap:14px}
   /* forms / modal / auth */
   .fld{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
   .fld label{font-size:12px;font-weight:600;color:var(--text)}
@@ -278,7 +279,8 @@
 <div id="drawer" class="drawer hide">
   <div class="drawer-bg" onclick="closeDrawer()"></div>
   <div class="drawer-panel" role="dialog" aria-modal="true">
-    <div class="drawer-hd"><div><div class="q" id="drawer-q"></div><div class="sub" id="drawer-sub"></div></div>
+    <div class="drawer-hd"><div style="min-width:0"><div class="q" id="drawer-q"></div><div class="sub" id="drawer-sub"></div></div>
+      <button class="btn ghost" id="drawer-viewall" style="flex:none;padding:6px 11px;font-size:12px">View all history</button>
       <button class="drawer-x" onclick="closeDrawer()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     <div class="drawer-bd" id="drawer-bd"></div>
   </div>
@@ -300,7 +302,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0 };
+const state = { clients:[], prompts:[], results:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'' };
 
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -606,15 +608,21 @@ window.openPrompt = function(cid, encText, showAll){
   $('drawer-q').textContent=text;
   const latest=hist[0], ment=latest.rows.filter(r=>r.client_mentioned).length;
   $('drawer-sub').innerHTML=`${c?esc(c.name):''} &middot; ${hist.length} day${hist.length>1?'s':''} tracked &middot; latest ${esc(latest.date)}: mentioned in ${ment} of ${latest.rows.length}`;
-  const shown = showAll ? hist : hist.slice(0,5);
+  const shown = hist.slice(0,5);
   let html = shown.map((day,i)=>
     `<div class="dayhead"><span>${esc(day.date)}</span>${i===0?'<span class="daynow">latest</span>':''}<span class="daycount">${day.rows.filter(r=>r.client_mentioned).length}/${day.rows.length} mentioned</span></div>`
     + day.rows.map(answerCard).join('')
   ).join('');
-  if(!showAll && hist.length>5)
-    html += `<button class="btn ghost" style="align-self:center;margin-top:4px" onclick="openPrompt('${cid}','${encText}',true)">View all ${hist.length} days</button>`;
+  if(hist.length>5)
+    html += `<button class="btn ghost" style="align-self:center;margin-top:4px" onclick="openPromptPage('${cid}','${encText}')">View all ${hist.length} days &rarr;</button>`;
   $('drawer-bd').innerHTML=html;
+  document.getElementById('drawer-viewall').onclick=()=>openPromptPage(cid, encText);
   $('drawer').classList.remove('hide'); $('drawer-bd').scrollTop=0;
+};
+window.openPromptPage=function(cid, encText){
+  closeDrawer();
+  state.view='prompt'; state.clientId=cid; state.promptText=decodeURIComponent(encText);
+  render();
 };
 window.closeDrawer=()=>$('drawer').classList.add('hide');
 
@@ -705,8 +713,43 @@ window.deleteClient=async function(id){
 // ---------- ROUTER ----------
 window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null;} render(); };
 window.openClient=function(id){ state.view='client'; state.clientId=id; state.tab='overview'; render(); };
-window.setTab=function(t){ state.tab=t; render(); };
-function render(){ renderNav(); if(state.view==='clients') renderClients(); else renderClient(); window.scrollTo(0,0); }
+window.setTab=function(t){ state.view='client'; state.tab=t; render(); };
+function render(){ renderNav();
+  if(state.view==='clients') renderClients();
+  else if(state.view==='prompt') renderPromptPage();
+  else renderClient();
+  window.scrollTo(0,0);
+}
+function renderPromptPage(){
+  const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
+  const text=state.promptText;
+  const hist=promptHistory(c.id, text);
+  $('topbar').innerHTML=`<div style="min-width:0"><div class="crumb"><a onclick="go('clients')">Clients</a> / <a onclick="openClient('${c.id}')">${esc(c.name)}</a> / <b>Prompt history</b></div><div class="h1">${esc(text)}</div></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" onclick="openClient('${c.id}')">${'<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M15 18l-6-6 6-6\"/></svg>'} Back to ${esc(c.name)}</button>`;
+  if(!hist.length){ $('content').innerHTML=`<div class="note">No history yet for this prompt.</div>`; return; }
+  const latest=hist[0], lm=latest.rows.filter(r=>r.client_mentioned).length;
+  // per-day mention rate strip (oldest -> newest)
+  const strip=hist.slice().reverse().map(d=>{ const m=d.rows.filter(r=>r.client_mentioned).length, t=d.rows.length;
+    const pct=t?Math.round(m/t*100):0; const col=pct>0?'var(--pos)':'var(--border)';
+    return `<div title="${esc(d.date)}: ${m}/${t}" style="flex:1;min-width:14px;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="width:100%;height:${Math.max(6,pct*0.5)}px;min-height:6px;background:${col};border-radius:3px"></div>
+      <div style="font-size:9px;color:var(--faint);font-family:var(--font-mono)">${esc(d.date.slice(5))}</div></div>`;}).join('');
+  const days=hist.map((day,i)=>
+    `<div class="dayhead"><span>${esc(day.date)}</span>${i===0?'<span class="daynow">latest</span>':''}<span class="daycount">${day.rows.filter(r=>r.client_mentioned).length}/${day.rows.length} mentioned</span></div>`
+    + day.rows.map(answerCard).join('')
+  ).join('');
+  $('content').innerHTML=`
+    <div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:640px">
+      ${tile('Days tracked', String(hist.length), `since ${esc(hist[hist.length-1].date)}`, 'var(--accent)')}
+      ${tile('Latest', `${lm}/${latest.rows.length}`, `mentioned on ${esc(latest.date)}`, lm?'var(--pos)':'var(--neg)')}
+      ${tile('Prompt type', promptKind(c.id,text)==='branded'?'Branded':'Unbranded', 'buyer intent', 'var(--s2)')}
+    </div>
+    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Mention rate over time</h3><p>Share of models mentioning ${esc(c.name)} each day</p></div></div>
+      <div class="bd"><div style="display:flex;gap:6px;align-items:flex-end;height:80px">${strip}</div></div></div>
+    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every answer over time</h3><p>Newest first, grouped by day</p></div></div>
+      <div class="bd phist">${days}</div></div>`;
+}
 window.loadAndRender=async function(){ await loadAll(); render(); };
 window.runNow=async function(){
   if(state.running) return;
