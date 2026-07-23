@@ -872,7 +872,7 @@ function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);
 window.clientSettingsModal=function(cid){
   const c=state.clients.find(x=>x.id===cid); if(!c) return;
   const models=c.models||['openai','anthropic'];
-  const have=['openai','anthropic','perplexity']; // platforms with live keys
+  const have=['openai','anthropic','perplexity','gemini']; // platforms with live keys
   const modelBox=CANON_MODELS.map(m=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;${have.includes(m)?'':'opacity:.5'}">
     <input type="checkbox" data-model="${m}" ${models.includes(m)?'checked':''} ${have.includes(m)?'':'disabled'}> ${MB(m).n}${have.includes(m)?'':' (no key)'}</label>`).join('');
   const acctBlock = c.status==='pitch'
