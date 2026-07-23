@@ -108,6 +108,46 @@
   .actev{font-size:11.5px;color:var(--faint);margin-top:7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis}
   .actbtns{display:flex;gap:8px;align-items:center;flex:none}
   .catchip{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
+  /* kanban */
+  .kboard{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+  .kcol{flex:0 0 268px;display:flex;flex-direction:column;gap:10px}
+  .kcolhd{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:2px 2px 4px}
+  .kcolhd .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .kcolhd .ct{margin-left:auto;font-size:11px;color:var(--faint);font-weight:600;background:var(--panel-2);border-radius:20px;padding:1px 8px}
+  .kcard{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:12px 13px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .12s,transform .12s;display:flex;flex-direction:column;gap:8px}
+  .kcard:hover{border-color:var(--accent-line);transform:translateY(-1px)}
+  .kcard .kmeta{display:flex;align-items:center;gap:7px}
+  .kcard .ktitle{font-size:13px;font-weight:600;line-height:1.35}
+  .kcard .kfoot{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--faint)}
+  .kcard .kbtns{display:flex;gap:6px;margin-top:2px}
+  .prio{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+  .prio i{width:3px;border-radius:1px;background:var(--border)}
+  .prio i.on{background:var(--pr)}
+  .kcolempty{font-size:11.5px;color:var(--faint);border:1px dashed var(--border);border-radius:10px;padding:14px;text-align:center}
+  /* action detail modal */
+  .modal-wide{width:min(780px,96vw)!important}
+  .adet-hd{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
+  .adet-hd .x{flex:none;width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--muted);display:grid;place-items:center}
+  .adet-hd h2{font-size:18px;margin:0;line-height:1.3}
+  .adet-hd .sub{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+  .adet-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px}
+  .adet-meta .k{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .adet-meta .v{font-size:13.5px;font-weight:600;margin-top:5px}
+  .adet-sec{border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+  .adet-sec.accent{border-left:3px solid var(--pos)}
+  .adet-lab{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700;margin:14px 0 8px}
+  .adet-must{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;margin:8px 0}
+  .adet-must svg{width:16px;height:16px;color:var(--pos);flex:none;margin-top:2px}
+  .adet-src{display:flex;gap:8px;font-size:12.5px;padding:6px 0;align-items:baseline}
+  .adet-src a{color:var(--accent);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .adet-src .n{margin-left:auto;color:var(--faint);font-weight:600;white-space:nowrap;font-size:11.5px}
+  .cmt{display:flex;gap:10px;padding:11px 0;border-top:1px solid var(--border)}
+  .cmt .av{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700;font-size:11px;flex:none}
+  .cmt .who{font-size:12px;font-weight:600}
+  .cmt .when{font-size:11px;color:var(--faint);margin-left:6px}
+  .cmt .body{font-size:13px;color:var(--text);margin-top:3px;line-height:1.5;white-space:pre-wrap}
+  .cmtbox{display:flex;gap:9px;margin-top:12px}
+  .cmtbox textarea{flex:1;font-family:inherit;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--panel-2);color:var(--text);resize:vertical;min-height:44px}
   .content{padding:22px 26px 60px;max-width:1280px;width:100%}
   .grid{display:grid;gap:16px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
@@ -321,7 +361,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'', windowDays:7, modelFilter:'all', genRunning:false };
+const state = { clients:[], prompts:[], results:[], actions:[], view:'clients', clientId:null, tab:'overview', running:false, runStart:0, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, openActionId:null, userEmail:'' };
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
 
 const $ = id => document.getElementById(id);
@@ -694,7 +734,7 @@ function fmtAnswer(t){
 
 // ---------- MODALS (config) ----------
 window.closeModal=()=>$('modal').classList.add('hide');
-function openModal(html){ $('modal-card').innerHTML=html; $('modal').classList.remove('hide'); }
+function openModal(html){ $('modal-card').className='modal-card'; $('modal-card').innerHTML=html; $('modal').classList.remove('hide'); }
 window.addClientModal=function(){
   openModal(`<h2>Add client</h2><div class="msub">The daily run starts tracking it automatically.</div>
     <div class="fld"><label>Client name</label><input id="m_name" placeholder="Acme Corp"></div>
@@ -746,37 +786,103 @@ window.deleteClient=async function(id){
   toast('Client deleted'); go('clients'); await loadAll(); render();
 };
 
-// ---------- ACTIONS ----------
+// ---------- ACTIONS (kanban board + detail) ----------
 const CAT={create:['Create content','var(--accent)'],update:['Update content','var(--neu)'],editorial:['Editorial','var(--s2)']};
+const COLS=[['suggested','Suggested','#B7842A'],['todo','To Do','#8A93A6'],['in_progress','In Progress','#4E5FE0'],['in_review','In Review','#17A79A'],['done','Done','#1F9D6B'],['archived','Archive','#8A93A6']];
+const PRIO={high:['var(--neg)',3],medium:['var(--neu)',2],low:['var(--faint)',1]};
 function catChip(cat){ const x=CAT[cat]||CAT.create; return `<span class="catchip" style="color:${x[1]};background:color-mix(in srgb,${x[1]} 13%,transparent)">${x[0]}</span>`; }
-function statusSelect(a){ const opts=[['todo','To do'],['in_progress','In progress'],['done','Done']];
-  return `<select class="fsel" style="padding:4px 8px;font-size:11.5px" onchange="setActionStatus('${a.id}',this.value)">${opts.map(o=>`<option value="${o[0]}"${a.status===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select>`; }
+function prioBars(p){ const x=PRIO[p]||PRIO.medium; return `<span class="prio" title="${p} priority" style="--pr:${x[0]}">${[1,2,3].map(n=>`<i class="${n<=x[1]?'on':''}" style="height:${4+n*3}px"></i>`).join('')}</span>`; }
+function fmtDate(iso){ return (iso||'').slice(0,10); }
 function actionsTabHTML(c){
   const acts=clientActions(c.id);
-  const suggested=acts.filter(a=>a.status==='suggested');
-  const active=acts.filter(a=>['todo','in_progress','done'].includes(a.status));
   const genBtn=`<button class="btn" onclick="genActions('${c.id}')" ${state.genRunning?'disabled':''}>${state.genRunning?'<span class="mini-spin"></span>Generating…':boltIcon()+'Generate recommendations'}</button>`;
-  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Recommended actions</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">What to build or earn to start showing up in AI answers, derived from the prompts you're absent on and the sources the models cite instead.</div></div><div class="spacer" style="flex:1"></div>${genBtn}</div>`;
+  const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Recommended actions</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">What to build or earn to start showing up in AI answers. Move cards Suggested → To Do → In Progress → Review → Done. Click a card for details, must-haves, sources and comments.</div></div><div class="spacer" style="flex:1"></div>${genBtn}</div>`;
   const banner=state.genRunning?`<div class="runbanner"><span class="mini-spin"></span>Analyzing your gaps and writing recommendations. About a minute; they'll appear here automatically.</div>`:'';
   if(!acts.length) return intro+banner+`<div class="note" style="max-width:560px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>No recommendations yet. Click "Generate recommendations" and Vantage will analyze this client's gaps.</div>`;
-  function card(a, accepted){
-    return `<div class="actcard"><div class="actbody"><div class="acttop">${catChip(a.category)}${accepted?statusSelect(a):''}</div>
-      <div class="acttitle">${esc(a.title)}</div>
-      ${a.rationale?`<div class="actrat">${esc(a.rationale)}</div>`:''}
-      ${a.evidence?`<div class="actev">↳ ${esc(a.evidence)}</div>`:''}</div>
-      <div class="actbtns">${accepted
-        ? `<button class="rowbtn" title="Delete" onclick="deleteAction('${a.id}')">${trashIcon()}</button>`
-        : `<button class="btn ghost" style="padding:6px 12px" onclick="rejectAction('${a.id}')">Reject</button><button class="btn" style="padding:6px 12px" onclick="acceptAction('${a.id}')">Accept</button>`}</div></div>`;
-  }
-  const sug=suggested.length?`<div class="promptgroup">Suggested (${suggested.length})</div>${suggested.map(a=>card(a,false)).join('')}`:'';
-  const act=active.length?`<div class="promptgroup">Accepted (${active.length})</div>${active.map(a=>card(a,true)).join('')}`:'';
-  return intro+banner+`<div style="display:flex;flex-direction:column;gap:10px">${sug}${act}</div>`;
+  const board=COLS.map(([key,name,color])=>{
+    const items=acts.filter(a=>a.status===key);
+    const cards=items.length? items.map(a=>{
+      const sug=key==='suggested';
+      return `<div class="kcard" onclick="openAction('${a.id}')">
+        <div class="kmeta">${prioBars(a.priority)}${catChip(a.category)}</div>
+        <div class="ktitle">${esc(a.title)}</div>
+        <div class="kfoot"><span>${fmtDate(a.created_at)}</span></div>
+        ${sug?`<div class="kbtns" onclick="event.stopPropagation()"><button class="btn ghost" style="padding:5px 10px;flex:1;justify-content:center" onclick="moveAction('${a.id}','archived')">Reject</button><button class="btn" style="padding:5px 10px;flex:1;justify-content:center" onclick="moveAction('${a.id}','todo')">Accept</button></div>`:''}
+      </div>`;
+    }).join('') : `<div class="kcolempty">Nothing here</div>`;
+    return `<div class="kcol"><div class="kcolhd"><span class="dot" style="background:${color}"></span>${name}<span class="ct">${items.length}</span></div>${cards}</div>`;
+  }).join('');
+  return intro+banner+`<div class="kboard">${board}</div>`;
 }
-async function updateAction(id,patch){ const {error}=await sb.from('actions').update(patch).eq('id',id); if(error){toast('Error: '+error.message);return;} await loadAll(); render(); }
-window.acceptAction=id=>updateAction(id,{status:'todo'});
-window.rejectAction=id=>updateAction(id,{status:'rejected'});
-window.setActionStatus=(id,s)=>updateAction(id,{status:s});
-window.deleteAction=async function(id){ if(!confirm('Delete this action?'))return; const {error}=await sb.from('actions').delete().eq('id',id); if(error){toast('Error: '+error.message);return;} toast('Deleted'); await loadAll(); render(); };
+function topCited(cid){
+  const md=maxDate(cid); if(!md) return [];
+  const start=shiftDate(md,-29);
+  const cnt={}; clientResults(cid).filter(r=>r.run_date>=start).forEach(r=>{ (r.cited_urls||[]).forEach(u=>{cnt[u]=(cnt[u]||0)+1;}); });
+  return Object.entries(cnt).map(([u,c])=>({u,c})).sort((a,b)=>b.c-a.c).slice(0,8);
+}
+window.openAction=async function(id){
+  state.openActionId=id;
+  openModal(`<div class="spinner"></div>`);
+  const {data}=await sb.from('action_comments').select('*').eq('action_id',id).order('created_at');
+  renderActionDetail(id, data||[]);
+};
+function renderActionDetail(id, comments){
+  const a=(state.actions||[]).find(x=>x.id===id); if(!a){ closeModal(); return; }
+  const statusSel=`<select class="fsel" style="font-size:12.5px" onchange="moveAction('${a.id}',this.value)">${COLS.map(([k,n])=>`<option value="${k}"${a.status===k?' selected':''}>${n}</option>`).join('')}</select>`;
+  const musts=(a.must_haves||[]).map(mh=>`<div class="adet-must"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><div>${esc(mh)}</div></div>`).join('');
+  const src=topCited(a.client_id);
+  const srcHTML=src.length? src.map(s=>{ let host=s.u; try{host=new URL(s.u).hostname.replace(/^www\./,'')}catch{}
+    return `<div class="adet-src"><a href="${esc(s.u)}" target="_blank" rel="noopener" title="${esc(s.u)}">${esc(host)}</a><span class="n">${s.c} citation${s.c>1?'s':''}</span></div>`; }).join('') : `<div style="font-size:12.5px;color:var(--faint)">No citation data yet.</div>`;
+  const cmtHTML=comments.length? comments.map(cm=>`<div class="cmt"><div class="av">${esc((cm.author||'?')[0].toUpperCase())}</div><div style="flex:1"><div><span class="who">${esc((cm.author||'').split('@')[0]||'user')}</span><span class="when">${fmtDate(cm.created_at)}</span></div><div class="body">${esc(cm.body)}</div></div></div>`).join('') : `<div style="text-align:center;color:var(--faint);font-size:12.5px;padding:14px 0">No comments yet. Be the first.</div>`;
+  const cap=s=>s? s[0].toUpperCase()+s.slice(1):s;
+  $('modal-card').className='modal-card modal-wide';
+  $('modal-card').innerHTML=`
+    <div class="adet-hd"><button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <div style="flex:1;min-width:0"><h2>${esc(a.title)}</h2><div class="sub">${(CAT[a.category]||CAT.create)[0]}</div></div>
+      <button class="btn danger" style="padding:7px 12px;flex:none" onclick="deleteAction('${a.id}')">${trashIcon()}Delete</button></div>
+    <div class="adet-meta">
+      <div><div class="k">Status</div><div class="v">${statusSel}</div></div>
+      <div><div class="k">Priority</div><div class="v" style="display:flex;align-items:center;gap:7px">${prioBars(a.priority)}${cap(a.priority)}</div></div>
+      <div><div class="k">Category</div><div class="v">${catChip(a.category)}</div></div>
+      <div><div class="k">Created</div><div class="v">${fmtDate(a.created_at)}</div></div>
+    </div>
+    <div class="adet-sec accent">
+      <div style="font-size:13.5px;line-height:1.6;color:var(--text)">${esc(a.rationale||'')}</div>
+      ${musts?`<div class="adet-lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><path d="M9 11l3 3 8-8M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>What it should include</div>${musts}`:''}
+      ${a.evidence?`<div style="font-size:11.5px;color:var(--faint);font-family:var(--font-mono);margin-top:12px">↳ tied to: ${esc(a.evidence)}</div>`:''}
+    </div>
+    <div class="adet-sec">
+      <div class="adet-lab" style="margin-top:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>Source examples</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-bottom:6px">Pages the models cite on this client's prompts (last 30 days).</div>
+      ${srcHTML}
+    </div>
+    <div class="adet-sec" style="background:var(--panel-2)">
+      <div class="adet-lab" style="margin-top:0">Why your page may not be cited</div>
+      <ul style="font-size:12.5px;color:var(--muted);line-height:1.7;margin:0;padding-left:18px">
+        <li>The content may not exist on your site yet</li><li>It may not be indexed or included in your sitemap</li><li>It lacks the structure and proof models quote (schema, data, named examples)</li></ul>
+    </div>
+    <div class="adet-sec">
+      <div class="adet-lab" style="margin-top:0">Comments (${comments.length})</div>
+      <div id="cmt-list">${cmtHTML}</div>
+      <div class="cmtbox"><textarea id="cmt-input" placeholder="Write a comment…  (Cmd/Ctrl+Enter to send)" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter')addComment('${a.id}')"></textarea><button class="btn" style="align-self:flex-end" onclick="addComment('${a.id}')">Send</button></div>
+    </div>`;
+}
+window.moveAction=async function(id,status){
+  const {error}=await sb.from('actions').update({status}).eq('id',id);
+  if(error){toast('Error: '+error.message);return;}
+  await loadAll(); render();
+  if(state.openActionId===id && !$('modal').classList.contains('hide')){
+    const c=await sb.from('action_comments').select('*').eq('action_id',id).order('created_at'); renderActionDetail(id, c.data||[]);
+  } else { toast('Moved to '+((COLS.find(x=>x[0]===status)||[])[1]||status)); }
+};
+window.addComment=async function(id){
+  const el=$('cmt-input'); const body=(el.value||'').trim(); if(!body)return;
+  const {error}=await sb.from('action_comments').insert({action_id:id, author: state.userEmail||'', body});
+  if(error){toast('Error: '+error.message);return;}
+  const c=await sb.from('action_comments').select('*').eq('action_id',id).order('created_at');
+  renderActionDetail(id, c.data||[]);
+};
+window.deleteAction=async function(id){ if(!confirm('Delete this action?'))return; const {error}=await sb.from('actions').delete().eq('id',id); if(error){toast('Error: '+error.message);return;} closeModal(); toast('Deleted'); await loadAll(); render(); };
 window.genActions=async function(cid){
   if(state.genRunning) return;
   const {error}=await sb.rpc('trigger_actions',{p_client:cid});
@@ -890,7 +996,7 @@ async function boot(){
   $('loading').classList.remove('hide');
   const { data:{ session } } = await sb.auth.getSession();
   if(!session){ $('loading').classList.add('hide'); $('auth').classList.remove('hide'); return; }
-  const email=session.user.email||'';
+  const email=session.user.email||''; state.userEmail=email;
   $('uemail').textContent=email; $('uav').textContent=(email[0]||'?').toUpperCase();
   await loadAll();
   $('loading').classList.add('hide'); $('app').classList.remove('hide');
