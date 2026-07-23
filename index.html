@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>95 Insights — AI Visibility</title>
+<link rel="icon" type="image/png" href="logo.png">
 <style>
   :root{
     --bg:#EBEEF4; --panel:#FFFFFF; --panel-2:#F5F7FB; --border:#E0E5EE;
@@ -166,6 +167,13 @@
   .rank{color:var(--faint);font-weight:600;width:26px}
   .brandcell{display:flex;align-items:center;gap:9px;font-weight:600}
   .lg{border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;flex:none;width:22px;height:22px}
+  .lg.ico{background:#fff;border:1px solid var(--border);overflow:hidden;padding:2px}
+  .lg.ico img{width:100%;height:100%;object-fit:contain;display:block}
+  .lg.ico b{display:none}
+  .lg.ico.fail{background:var(--fb);border:none;padding:0}
+  .lg.ico.fail img{display:none}
+  .lg.ico.fail b{display:grid;place-items:center;width:100%;height:100%;color:#fff;font-weight:800}
+  .mark img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
   tr.me td{background:var(--accent-weak)}
   tr.me .brandcell{color:var(--accent)}
   .bar{height:6px;border-radius:4px;background:var(--panel-2);overflow:hidden;min-width:60px}
@@ -304,7 +312,7 @@
 <!-- LOGIN -->
 <div id="auth" class="authwrap hide">
   <div class="authcard">
-    <div class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12c3-6 15-6 18 0-3 6-15 6-18 0Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></div>
+    <div class="mark"><img src="logo.png" alt="95 Insights"></div>
     <h1>95 Insights</h1>
     <p>AI visibility monitoring. Sign in with your work email and we'll send a one-tap link.</p>
     <input id="authEmail" type="email" placeholder="you@95projects.com" autocomplete="email">
@@ -320,7 +328,7 @@
 <div id="app" class="app hide">
   <aside class="side">
     <div class="brand">
-      <div class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12c3-6 15-6 18 0-3 6-15 6-18 0Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></div>
+      <div class="mark"><img src="logo.png" alt="95 Insights"></div>
       <div><b>95 Insights</b><span>AI Visibility</span></div>
     </div>
     <div class="navsec" id="nav"></div>
@@ -378,6 +386,20 @@ const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:
 const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:['off','No mention'];
 // Group rows into { key -> [rows] } by a field name.
 function groupBy(rows, key){ const m={}; rows.forEach(r=>{ (m[r[key]]=m[r[key]]||[]).push(r); }); return m; }
+// Free client favicon from the site's domain (Google's service, no key / no cost).
+function faviconUrl(website){
+  if(!website) return null;
+  try{ const h=new URL(/^https?:\/\//i.test(website)?website:'https://'+website).hostname;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=64`; }
+  catch{ return null; }
+}
+// Avatar for a client: real website favicon if we have one, else initials chip.
+// The initials sit behind the favicon and show only if the icon fails to load.
+function clientAvatar(c){
+  const fav=faviconUrl(c.website);
+  if(!fav) return `<span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>`;
+  return `<span class="lg ico" style="--fb:${colorFor(c.name)}"><img src="${esc(fav)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.lg').classList.add('fail')"><b>${esc(initials(c.name))}</b></span>`;
+}
 
 // ---------- AUTH ----------
 window.sendLink = async function(){
@@ -521,7 +543,7 @@ function renderClients(){
     const s=summary(c.id);
     const tagc = c.status==='pitch'?'var(--faint)':'var(--pos)';
     return `<button class="ccard" onclick="openClient('${c.id}')">
-      <div class="row1"><span class="lg" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>
+      <div class="row1">${clientAvatar(c)}
         <div><div class="nm">${esc(c.name)}</div><span class="tag" style="color:${tagc};background:color-mix(in srgb,${tagc} 14%,transparent)">${esc(c.status)}</span></div></div>
       <div class="stats">
         <div class="stat"><div class="k">Visibility</div><div class="v tnum">${s.unbTotal?s.vis+'%':'—'}</div></div>
