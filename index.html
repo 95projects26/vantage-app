@@ -795,8 +795,15 @@ window.clientSettingsModal=function(cid){
   const have=['openai','anthropic']; // platforms with live keys
   const modelBox=CANON_MODELS.map(m=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;${have.includes(m)?'':'opacity:.5'}">
     <input type="checkbox" data-model="${m}" ${models.includes(m)?'checked':''} ${have.includes(m)?'':'disabled'}> ${MB(m).n}${have.includes(m)?'':' (no key)'}</label>`).join('');
+  const acctBlock = c.status==='pitch'
+    ? `<div class="fld" style="background:var(--neu-weak);border:1px solid var(--border);border-radius:11px;padding:13px 14px">
+         <label style="color:var(--text)">Pitch account</label>
+         <div class="hint">A snapshot to show a prospect what they show up for. Runs twice, when you add prompts and once the next day, then only when you hit Run now. It doesn't track long-term.</div>
+         <button class="btn" style="margin-top:9px" onclick="convertToClient('${cid}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M20 6L9 17l-5-5"/></svg>Convert to client account</button></div>`
+    : `<div class="fld"><label>Client account</label><div class="hint">Tracked on the schedule below.</div></div>`;
   openModal(`<h2>${esc(c.name)} — settings</h2><div class="msub">Control how often this client runs and which models it uses, to manage credit spend.</div>
-    <div class="fld"><label>Run frequency</label><div class="hint">How often the scheduler runs this client's prompts. A manual "Run now" always runs regardless.</div>
+    ${acctBlock}
+    <div class="fld"><label>Run frequency</label><div class="hint">For client accounts, how often the scheduler runs the prompts. A manual "Run now" always runs regardless.</div>
       <select id="s_freq" class="fsel" style="width:100%;padding:9px 11px">
         <option value="daily"${c.frequency==='daily'?' selected':''}>Daily</option>
         <option value="every_other_day"${c.frequency==='every_other_day'?' selected':''}>Every other day</option>
@@ -813,6 +820,11 @@ window.saveSettings=async function(cid){
   const {error}=await sb.from('clients').update({frequency:freq, models, actions_auto_weekly:auto}).eq('id',cid);
   if(error){ toast('Error: '+error.message); return; }
   closeModal(); toast('Settings saved'); await loadAll(); render();
+};
+window.convertToClient=async function(cid){
+  const {error}=await sb.from('clients').update({status:'client'}).eq('id',cid);
+  if(error){ toast('Error: '+error.message); return; }
+  closeModal(); toast('Converted to client — now on the daily schedule'); await loadAll(); render();
 };
 window.deletePrompt=async function(id){
   if(!confirm('Delete this prompt? It stops being tracked from the next run on. Past results stay in history.')) return;
