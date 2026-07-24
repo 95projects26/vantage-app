@@ -195,7 +195,7 @@
   .ccard .row1 .lg{width:38px;height:38px;border-radius:9px;font-size:14px}
   .ccard .nm{font-weight:650;font-size:14.5px}
   .ccard .tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;margin-top:2px;display:inline-block}
-  .ccard .stats{display:flex;gap:18px;padding-top:11px;border-top:1px solid var(--border)}
+  .ccard .stats{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:11px;border-top:1px solid var(--border)}
   .ccard .stat .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
   .ccard .stat .v{font-size:17px;font-weight:680;margin-top:3px}
   .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:2px;flex-wrap:wrap}
@@ -366,6 +366,24 @@ const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id==
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
 const LIVE_MODELS = ['openai','anthropic','perplexity','gemini']; // platforms with API keys configured (aio not yet built)
+// Rough estimated USD per result row = one model's web-search answer + its Haiku
+// analyzer call. Ballpark from current pricing; edit to match your real bills.
+const MODEL_COST = { openai:0.045, anthropic:0.06, perplexity:0.018, gemini:0.012, aio:0 };
+const estCost = rows => rows.reduce((s,r)=> s + (MODEL_COST[r.model]||0), 0);
+function costForDate(dateStr){ return estCost(state.results.filter(r=>r.run_date===dateStr)); }
+// { latest, latestDate, d7, d30 } estimated run cost across all clients.
+function costSummary(){
+  const dates=[...new Set(state.results.map(r=>r.run_date))].sort().reverse();
+  const md=state.results.reduce((m,r)=>r.run_date>m?r.run_date:m,''), today=new Date().toISOString().slice(0,10);
+  const sumDates=n=>dates.slice(0,n).reduce((s,d)=>s+costForDate(d),0);
+  return { latest:costForDate(md), latestDate:md, isToday:md===today, d7:sumDates(7), d30:sumDates(30), days:dates.length };
+}
+// A client's estimated cost on its most recent run.
+function clientLatestCost(cid){
+  const rs=clientResults(cid); if(!rs.length) return null;
+  const md=rs.reduce((m,r)=>r.run_date>m?r.run_date:m, rs[0].run_date);
+  return estCost(rs.filter(r=>r.run_date===md));
+}
 // Paste your logo.dev PUBLISHABLE key (pk_...) here to use real brand logos (free tier).
 // It's a client-side publishable key, safe to ship. Empty = fall back to unavatar/favicon.
 const LOGO_DEV_TOKEN = 'pk_SuvgDcJXQKiDfTF06GjgCw';
@@ -575,7 +593,7 @@ function renderClients(){
     return;
   }
   const cards = state.clients.map(c=>{
-    const s=summary(c.id);
+    const s=summary(c.id); const cost=clientLatestCost(c.id);
     const tagc = c.status==='pitch'?'var(--faint)':'var(--pos)';
     return `<button class="ccard" onclick="openClient('${c.id}')">
       <div class="row1">${clientAvatar(c)}
@@ -584,9 +602,23 @@ function renderClients(){
         <div class="stat"><div class="k">Visibility</div><div class="v tnum">${s.unbTotal?s.vis+'%':'—'}</div></div>
         <div class="stat"><div class="k">SoV rank</div><div class="v tnum">${s.rank?('#'+s.rank):'—'}</div></div>
         <div class="stat"><div class="k">Prompts</div><div class="v tnum">${s.promptCount}</div></div>
+        <div class="stat"><div class="k">Cost/run</div><div class="v tnum">${cost!=null?'$'+cost.toFixed(2):'—'}</div></div>
       </div></button>`;
   }).join('');
-  $('content').innerHTML = `<div class="clientgrid">${cards}</div>`;
+  $('content').innerHTML = costBar() + `<div class="clientgrid">${cards}</div>`;
+}
+// Compact estimated-cost strip on the Clients page.
+function costBar(){
+  if(!state.results.length) return '';
+  const cs=costSummary();
+  const cell=(lab,val)=>`<div><div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600">${lab}</div><div class="tnum" style="font-size:21px;font-weight:680;margin-top:3px">$${val.toFixed(2)}</div></div>`;
+  return `<div class="card" style="margin-bottom:16px"><div class="bd" style="display:flex;align-items:center;gap:30px;flex-wrap:wrap">
+    ${cell((cs.isToday?'Today':'Latest run')+(cs.latestDate?' · '+esc(cs.latestDate):''), cs.latest)}
+    ${cell('Last 7 days', cs.d7)}
+    ${cell('Last 30 days', cs.d30)}
+    <div class="spacer"></div>
+    <div style="font-size:11px;color:var(--faint);max-width:280px;line-height:1.5">Estimated from model-call volume. Exact charges live in each provider's billing dashboard.</div>
+  </div></div>`;
 }
 
 // ---------- RENDER: client detail ----------
