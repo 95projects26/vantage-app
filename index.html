@@ -660,7 +660,7 @@ function overviewHTML(c){
   const uTot=s.usc.positive+s.usc.neutral+s.usc.negative;
   const repSub = s.brandedCount ? `${s.bsc.positive} pos · ${s.bsc.neutral} neu · ${s.bsc.negative} neg` : 'no branded prompts';
   const uSentSub = uTot ? `${s.usc.positive} pos · ${s.usc.neutral} neu · ${s.usc.negative} neg` : 'no unbranded mentions yet';
-  const tiles = `<div class="eyebrow" style="margin-bottom:11px">Rolling ${state.windowDays}-day window · visibility on buyer-intent prompts · through ${esc(s.windowEnd||'')}</div><div class="tiles">
+  const tiles = `<div class="eyebrow" style="margin-bottom:11px">${state.windowDays>=3650?'All-time':'Rolling '+state.windowDays+'-day'} window · visibility on buyer-intent prompts · through ${esc(s.windowEnd||'')}</div><div class="tiles">
     ${tile('AI Visibility', s.unbTotal? s.vis+'%':'—', visSub, s.unbTotal&&s.vis<40?'var(--neg)':'var(--accent)', s.unbTotal&&s.vis<40?'var(--neg)':null)}
     ${tile('Share of voice', s.rank?('#'+s.rank):'—', sovSub, 'var(--s2)')}
     ${tile('Branded reputation', s.brandedCount? s.bSentLabel:'—', repSub, 'var(--neu)', null, 22)}
@@ -795,7 +795,7 @@ function competitorsHTML(c){
     return `<tr class="${mine?'me':''}"><td class="rank tnum">${i+1}</td><td><div class="brandcell">${mine?clientAvatar(c):brandChip(b.n)}${esc(b.n)}${mine?' <span class="chip pos" style="font-size:10px;padding:1px 7px">you</span>':''}</div></td>
       <td class="tnum" style="font-weight:600">${b.vis}%</td>
       <td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><div class="bar" style="max-width:120px"><i style="width:${b.vis}%;background:${mine?'var(--accent)':colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px">${b.vis}%</span></div></td></tr>`;}).join('')}</tbody></table>`;
-  return `<div class="eyebrow" style="margin-bottom:12px">You vs. competitors · unbranded prompts · last ${state.windowDays} days</div>
+  return `<div class="eyebrow" style="margin-bottom:12px">You vs. competitors · unbranded prompts · ${winText()}</div>
     <div class="card"><div class="hd"><div><h3>Visibility over time</h3><p>Share of AI answers naming each brand (${esc(c.name)} in blue)</p></div></div><div class="bd">${chart}${legend}</div></div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Ranking</h3><p>Every brand the models name on your prompts</p></div></div><div class="bd" style="overflow-x:auto">${table}</div></div>`;
 }
@@ -856,7 +856,7 @@ function sourcesPanels(rows, scope, c){
 function sourcesHTML(c){
   const rows=windowRows(c.id, state.windowDays);
   if(!rows.length) return `<div class="note">No citations captured yet.</div>`;
-  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · last ${state.windowDays} days</div>`+sourcesPanels(rows,'across all prompts', c);
+  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · ${winText()}</div>`+sourcesPanels(rows,'across all prompts', c);
 }
 
 // ---------- DRAWER (prompt history over time) ----------
@@ -1245,7 +1245,7 @@ function perceptionHTML(c){
   const sentCard=`<div class="card"><div class="hd"><div><h3>Sentiment over time</h3><p>How favorably the models talk about ${esc(c.name)} when mentioned</p></div></div><div class="bd">${chart||'<div class="note">Not enough mentions yet for a trend.</div>'}${distro}</div></div>`;
 
   const header=`<div style="display:flex;align-items:center;margin-bottom:14px"><div class="eyebrow">How AI perceives ${esc(c.name)}${p&&p.generated_at?' · updated '+fmtDate(p.generated_at):''}</div><div class="spacer"></div>${genBtn}</div>`;
-  const scoreboard = stats.length? `<div class="eyebrow" style="margin-bottom:9px">Which models surface you · last ${state.windowDays} days</div>${modelScoreboard(stats)}` : '';
+  const scoreboard = stats.length? `<div class="eyebrow" style="margin-bottom:9px">Which models surface you · ${winText()}</div>${modelScoreboard(stats)}` : '';
 
   // focused single-model view when a specific model is picked in the top filter
   const fm=state.modelFilter;
@@ -1280,9 +1280,10 @@ function filterControls(cid){
     CANON_MODELS.map(m=>{ const on=have.includes(m);
       const suffix = on ? '' : (LIVE_MODELS.includes(m) ? ' (no data yet)' : ' (no key)');
       return `<option value="${m}"${state.modelFilter===m?' selected':''}${on?'':' disabled'}>${MB(m).n}${suffix}</option>`;}).join('');
-  const seg=`<div class="seg">${[7,14,30].map(d=>`<button class="${state.windowDays===d?'on':''}" onclick="setWindow(${d})">${d}d</button>`).join('')}</div>`;
+  const seg=`<div class="seg">${[[7,'7d'],[14,'14d'],[30,'30d'],[90,'90d'],[3650,'All']].map(([d,l])=>`<button class="${state.windowDays===d?'on':''}" onclick="setWindow(${d})">${l}</button>`).join('')}</div>`;
   return seg+`<select class="fsel" onchange="setModel(this.value)">${opts}</select>`;
 }
+function winText(){ return state.windowDays>=3650 ? 'all time' : 'last '+state.windowDays+' days'; }
 window.setWindow=function(d){ state.windowDays=d; render(); };
 window.setModel=function(m){ state.modelFilter=m; render(); };
 window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
@@ -1321,7 +1322,7 @@ function renderPromptPage(){
   const urlHTML = urlTableHTML(wrows, c.name, c.id);
   $('content').innerHTML=`
     <div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:640px">
-      ${tile('Days tracked', String(hist.length), `last ${state.windowDays} days`, 'var(--accent)')}
+      ${tile('Days tracked', String(hist.length), winText(), 'var(--accent)')}
       ${tile('Latest', `${lm}/${latest.rows.length}`, `mentioned on ${esc(latest.date)}`, lm?'var(--pos)':'var(--neg)')}
       ${tile('Prompt type', promptKind(c.id,text)==='branded'?'Branded':'Unbranded', 'buyer intent', 'var(--s2)')}
     </div>
