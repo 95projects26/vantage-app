@@ -361,7 +361,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -473,7 +473,7 @@ window.signOut = async function(){ await sb.auth.signOut(); location.reload(); }
 
 // ---------- DATA ----------
 async function loadAll(){
-  const [c,p,r,a,sg,pc,sm,rh,ss] = await Promise.all([
+  const [c,p,r,a,sg,pc,sm,rh,ss,pcost] = await Promise.all([
     sb.from('clients').select('*').order('created_at'),
     sb.from('prompts').select('*'),
     sb.from('results').select('*').order('run_date',{ascending:false}),
@@ -483,12 +483,14 @@ async function loadAll(){
     sb.from('source_mentions').select('*'),
     sb.from('run_health').select('*').order('created_at',{ascending:false}).limit(200),
     sb.from('service_status').select('*'),
+    sb.from('provider_cost').select('*'),
   ]);
   if(c.error||p.error||r.error){ toast('Load error: '+((c.error||p.error||r.error).message)); }
   state.clients=c.data||[]; state.prompts=p.data||[]; state.results=r.data||[]; state.actions=a.data||[];
   state.suggestions=sg.data||[]; state.perception=pc.data||[];
   state.srcMentions={}; (sm.data||[]).forEach(x=>{ state.srcMentions[x.url]=x.brands||[]; });
   state.runHealth=rh&&rh.data?rh.data:[]; state.serviceStatus=ss&&ss.data?ss.data:[];
+  state.providerCost=pcost&&pcost.data?pcost.data:[];
 }
 const clientResults = cid => state.results.filter(r=>r.client_id===cid);
 const clientPrompts = cid => state.prompts.filter(p=>p.client_id===cid);
@@ -666,8 +668,14 @@ function renderOps(){
   const d30start=shiftDate(today,-29);
   const mtd=spendByModel(r=>r.run_date&&r.run_date.slice(0,7)===ym);
   const l30=spendByModel(r=>r.run_date>=d30start&&r.run_date<=today);
-  const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
-  const burn=sum(l30);
+  // Real billed cost from provider_cost (OpenAI/Anthropic admin cost APIs), keyed by service.
+  const realCost=pred=>{ const o={}; (state.providerCost||[]).forEach(x=>{ if(pred(x.cost_date)) o[x.service]=(o[x.service]||0)+Number(x.amount||0); }); return o; };
+  const realMtd=realCost(d=>d&&d.slice(0,7)===ym), realL30=realCost(d=>d>=d30start&&d<=today);
+  const hasReal=m=>Object.prototype.hasOwnProperty.call(realL30,m)||Object.prototype.hasOwnProperty.call(realMtd,m);
+  const effMtd=m=>hasReal(m)?(realMtd[m]||0):(mtd[m]||0);
+  const effL30=m=>hasReal(m)?(realL30[m]||0):(l30[m]||0);
+  const anyReal=(state.providerCost||[]).length>0;
+  const burn=Object.keys(MODEL_META).filter(m=>LIVE_MODELS.includes(m)).reduce((s,m)=>s+effL30(m),0);
   // DataForSEO real balance
   const dfs=(state.serviceStatus||[]).find(s=>s.service==='dataforseo');
   const aioDaily=(() => { const days=[...new Set(state.results.filter(r=>r.model==='aio').map(r=>r.run_date))].sort().slice(-7);
@@ -682,27 +690,29 @@ function renderOps(){
     : tile('DataForSEO balance', '—', 'shows after next run', 'var(--faint)');
 
   const tiles = `<div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:720px">
-    ${tile('Est. monthly burn', money(burn), 'all providers · last 30 days', 'var(--accent)')}
+    ${tile((anyReal?'Monthly burn':'Est. monthly burn'), money(burn), 'all providers · last 30 days'+(anyReal?' · real where available':''), 'var(--accent)')}
     ${balTile}
     ${tile('Last run', lastRunAgo, wf?('job '+esc(wf.status)):'per-client below', wf&&HEALTH_COL[wf.status]||'var(--s2)')}
   </div>`;
 
   // Spend-by-provider table (estimated)
+  const realTag='<span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--pos);background:color-mix(in srgb,var(--pos) 14%,transparent);padding:1px 6px;border-radius:5px">BILLED</span>';
+  const estTag='<span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--faint);background:var(--panel-2);padding:1px 6px;border-radius:5px">EST</span>';
   const provRows = Object.keys(MODEL_META).filter(m=>LIVE_MODELS.includes(m)).map(m=>{
-    const meta=MODEL_META[m];
+    const meta=MODEL_META[m], real=hasReal(m);
     return `<div class="urlrow" style="display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:9px;min-width:0">${svcLogo(meta.domain,meta.name)}<span style="font-weight:600">${esc(meta.name)}</span></div>
-      <div class="tnum">${money(mtd[m]||0)}</div>
-      <div class="tnum">${money(l30[m]||0)}</div>
-      <div style="font-size:11.5px;color:var(--faint)">billed by ${esc(meta.bill)}</div>
+      <div class="tnum">${money(effMtd(m))}</div>
+      <div class="tnum">${money(effL30(m))}</div>
+      <div style="font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:6px">${real?realTag:estTag}<span>${real?'from '+esc(meta.bill):'billed by '+esc(meta.bill)}</span></div>
     </div>`;
   }).join('');
-  const spendCard = `<div class="card"><div class="hd"><div><h3>Estimated spend by provider</h3><p>Computed from model-call volume · not the provider's exact bill</p></div></div>
+  const spendCard = `<div class="card"><div class="hd"><div><h3>Spend by provider</h3><p><b style="color:var(--pos)">BILLED</b> = real cost from the provider's API · <b>EST</b> = from call volume</p></div></div>
     <div class="bd">
       <div style="display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--border)">
-        <div>Provider</div><div>This month</div><div>Last 30d</div><div></div></div>
+        <div>Provider</div><div>This month</div><div>Last 30d</div><div>Source</div></div>
       ${provRows}
-      <div style="margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.5">Only <b>DataForSEO</b> exposes a live balance (shown above). For OpenAI, Anthropic, Perplexity and Google, open their console (below) for exact charges — those numbers are estimates from how many calls we made.</div>
+      <div style="margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.5">${anyReal?'<b style="color:var(--pos)">BILLED</b> rows show the exact invoiced dollars from each provider (OpenAI/Anthropic admin cost APIs).':'Add <span style="font-family:var(--font-mono)">OPENAI_ADMIN_KEY</span> + <span style="font-family:var(--font-mono)">ANTHROPIC_ADMIN_KEY</span> as GitHub secrets to swap the OpenAI/Anthropic estimates for real billed dollars.'} Perplexity &amp; Google have no cost API, so they stay estimated — open their console below for exact charges.</div>
     </div></div>`;
 
   // Run health
