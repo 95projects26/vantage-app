@@ -361,7 +361,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -473,7 +473,7 @@ window.signOut = async function(){ await sb.auth.signOut(); location.reload(); }
 
 // ---------- DATA ----------
 async function loadAll(){
-  const [c,p,r,a,sg,pc,sm] = await Promise.all([
+  const [c,p,r,a,sg,pc,sm,rh,ss] = await Promise.all([
     sb.from('clients').select('*').order('created_at'),
     sb.from('prompts').select('*'),
     sb.from('results').select('*').order('run_date',{ascending:false}),
@@ -481,11 +481,14 @@ async function loadAll(){
     sb.from('prompt_suggestions').select('*').order('volume',{ascending:false}),
     sb.from('perception').select('*'),
     sb.from('source_mentions').select('*'),
+    sb.from('run_health').select('*').order('created_at',{ascending:false}).limit(200),
+    sb.from('service_status').select('*'),
   ]);
   if(c.error||p.error||r.error){ toast('Load error: '+((c.error||p.error||r.error).message)); }
   state.clients=c.data||[]; state.prompts=p.data||[]; state.results=r.data||[]; state.actions=a.data||[];
   state.suggestions=sg.data||[]; state.perception=pc.data||[];
   state.srcMentions={}; (sm.data||[]).forEach(x=>{ state.srcMentions[x.url]=x.brands||[]; });
+  state.runHealth=rh&&rh.data?rh.data:[]; state.serviceStatus=ss&&ss.data?ss.data:[];
 }
 const clientResults = cid => state.results.filter(r=>r.client_id===cid);
 const clientPrompts = cid => state.prompts.filter(p=>p.client_id===cid);
@@ -556,8 +559,9 @@ function summary(cid){
 // ---------- RENDER: shell ----------
 function renderNav(){
   const nav=$('nav');
-  if(state.view==='clients'){
-    nav.innerHTML = navBtn('clients','Clients',true,gridIcon());
+  if(state.view==='clients' || state.view==='ops'){
+    nav.innerHTML = navBtn('clients','Clients',state.view==='clients',gridIcon())
+      + navBtn('ops','Backend',state.view==='ops',serverIcon());
   } else {
     const c=state.clients.find(x=>x.id===state.clientId);
     nav.innerHTML = '<div class="navlbl">'+esc(c?c.name:'')+'</div>'+
@@ -581,6 +585,8 @@ function trashIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="curren
 function backIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 18l-6-6 6-6"/></svg>';}
 function chev(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>';}
 function infoIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>';}
+function serverIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>';}
+function extIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="width:12px;height:12px"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';}
 
 // ---------- RENDER: clients ----------
 function renderClients(){
@@ -619,6 +625,134 @@ function costBar(){
     <div class="spacer"></div>
     <div style="font-size:11px;color:var(--faint);max-width:280px;line-height:1.5">Estimated from model-call volume. Exact charges live in each provider's billing dashboard.</div>
   </div></div>`;
+}
+
+// ---------- RENDER: Backend (ops / consoles / spend / health) ----------
+const MODEL_META = {
+  openai:{name:'OpenAI · ChatGPT', domain:'openai.com', bill:'OpenAI'},
+  anthropic:{name:'Anthropic · Claude', domain:'anthropic.com', bill:'Anthropic'},
+  perplexity:{name:'Perplexity', domain:'perplexity.ai', bill:'Perplexity'},
+  gemini:{name:'Google · Gemini', domain:'gemini.google.com', bill:'Google'},
+  aio:{name:'Google AI Overviews', domain:'dataforseo.com', bill:'DataForSEO'},
+};
+const REPO='95projects26/ai-visibility-monitor', SBREF='fqvcsegmfxfmozqkgbtg';
+const CONSOLES = {
+  providers:[
+    {model:'openai', secret:'OPENAI_API_KEY', links:[['Usage','https://platform.openai.com/usage'],['Billing','https://platform.openai.com/settings/organization/billing/overview'],['API keys','https://platform.openai.com/api-keys']]},
+    {model:'anthropic', secret:'ANTHROPIC_API_KEY', links:[['Usage','https://console.anthropic.com/settings/usage'],['Billing','https://console.anthropic.com/settings/billing'],['API keys','https://console.anthropic.com/settings/keys']]},
+    {model:'perplexity', secret:'PERPLEXITY_API_KEY', links:[['API + billing','https://www.perplexity.ai/settings/api']]},
+    {model:'gemini', secret:'GEMINI_API_KEY', links:[['API keys','https://aistudio.google.com/app/apikey'],['Cloud billing','https://console.cloud.google.com/billing']]},
+    {model:'aio', secret:'DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD', links:[['Dashboard','https://app.dataforseo.com/api-dashboard'],['Top up balance','https://app.dataforseo.com/billing']]},
+  ],
+  infra:[
+    {name:'Supabase · database', domain:'supabase.com', secret:'SUPABASE_URL / SUPABASE_SERVICE_KEY', links:[['Project','https://supabase.com/dashboard/project/'+SBREF],['Table editor','https://supabase.com/dashboard/project/'+SBREF+'/editor'],['SQL editor','https://supabase.com/dashboard/project/'+SBREF+'/sql/new'],['Logs','https://supabase.com/dashboard/project/'+SBREF+'/logs/explorer']]},
+    {name:'GitHub · the daily run', domain:'github.com', secret:'repo → Settings → Secrets', links:[['Run history','https://github.com/'+REPO+'/actions'],['Edit secrets','https://github.com/'+REPO+'/settings/secrets/actions'],['Backend repo','https://github.com/'+REPO],['App repo','https://github.com/95projects26/vantage-app']]},
+    {name:'logo.dev · brand logos', domain:'logo.dev', secret:'LOGO_DEV_TOKEN (in index.html)', links:[['Dashboard','https://www.logo.dev/dashboard']]},
+  ],
+};
+const svcLogo = (domain,label)=> logoChip(domainSources(domain), esc((label||domain).replace(/\..*/,'').slice(0,2).toUpperCase()), 'var(--accent)');
+const money = n => '$'+(Number(n)||0).toFixed(2);
+function timeAgo(iso){ if(!iso) return '—'; const s=(Date.now()-new Date(iso).getTime())/1000;
+  if(s<0) return 'just now'; if(s<60) return 'just now'; if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; }
+function spendByModel(pred){ const o={}; state.results.forEach(r=>{ if(pred(r)) o[r.model]=(o[r.model]||0)+(MODEL_COST[r.model]||0); }); return o; }
+const HEALTH_COL = {ok:'var(--pos)', success:'var(--pos)', empty:'var(--faint)', error:'var(--neg)', failure:'var(--neg)', cancelled:'var(--neg)'};
+
+function renderOps(){
+  $('topbar').innerHTML = `<div><div class="crumb">Workspace</div><div class="h1">Backend</div></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" onclick="loadAndRender()">Refresh</button>`;
+  const today=new Date().toISOString().slice(0,10), ym=today.slice(0,7);
+  const d30start=shiftDate(today,-29);
+  const mtd=spendByModel(r=>r.run_date&&r.run_date.slice(0,7)===ym);
+  const l30=spendByModel(r=>r.run_date>=d30start&&r.run_date<=today);
+  const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
+  const burn=sum(l30);
+  // DataForSEO real balance
+  const dfs=(state.serviceStatus||[]).find(s=>s.service==='dataforseo');
+  const aioDaily=(() => { const days=[...new Set(state.results.filter(r=>r.model==='aio').map(r=>r.run_date))].sort().slice(-7);
+    if(!days.length) return 0; const c=state.results.filter(r=>r.model==='aio'&&days.includes(r.run_date)).length*MODEL_COST.aio; return c/days.length; })();
+  const runway=(dfs&&dfs.balance!=null&&aioDaily>0)? Math.floor(dfs.balance/aioDaily) : null;
+  // last run health
+  const wf=(state.runHealth||[]).find(h=>h.source==='workflow');
+  const lastRunAgo = state.runHealth.length? timeAgo(state.runHealth[0].created_at) : '—';
+
+  const balTile = dfs&&dfs.balance!=null
+    ? tile('DataForSEO balance', money(dfs.balance), (runway!=null?`~${runway} days of AI Overviews left`:'real balance')+` · ${timeAgo(dfs.checked_at)}`, dfs.balance<25?'var(--neg)':'var(--pos)')
+    : tile('DataForSEO balance', '—', 'shows after next run', 'var(--faint)');
+
+  const tiles = `<div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:720px">
+    ${tile('Est. monthly burn', money(burn), 'all providers · last 30 days', 'var(--accent)')}
+    ${balTile}
+    ${tile('Last run', lastRunAgo, wf?('job '+esc(wf.status)):'per-client below', wf&&HEALTH_COL[wf.status]||'var(--s2)')}
+  </div>`;
+
+  // Spend-by-provider table (estimated)
+  const provRows = Object.keys(MODEL_META).filter(m=>LIVE_MODELS.includes(m)).map(m=>{
+    const meta=MODEL_META[m];
+    return `<div class="urlrow" style="display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">${svcLogo(meta.domain,meta.name)}<span style="font-weight:600">${esc(meta.name)}</span></div>
+      <div class="tnum">${money(mtd[m]||0)}</div>
+      <div class="tnum">${money(l30[m]||0)}</div>
+      <div style="font-size:11.5px;color:var(--faint)">billed by ${esc(meta.bill)}</div>
+    </div>`;
+  }).join('');
+  const spendCard = `<div class="card"><div class="hd"><div><h3>Estimated spend by provider</h3><p>Computed from model-call volume · not the provider's exact bill</p></div></div>
+    <div class="bd">
+      <div style="display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <div>Provider</div><div>This month</div><div>Last 30d</div><div></div></div>
+      ${provRows}
+      <div style="margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.5">Only <b>DataForSEO</b> exposes a live balance (shown above). For OpenAI, Anthropic, Perplexity and Google, open their console (below) for exact charges — those numbers are estimates from how many calls we made.</div>
+    </div></div>`;
+
+  // Run health
+  const clientHealth = state.clients.map(c=>{
+    const h=(state.runHealth||[]).find(x=>x.client_id===c.id);
+    const md=maxDate(c.id);
+    const stale = md && ((Date.now()-new Date(md+'T12:00:00Z').getTime())/86400000 > 2.5);
+    const col = h?(HEALTH_COL[h.status]||'var(--s2)'):'var(--faint)';
+    const label = h? h.status : 'no log yet';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      ${clientAvatar(c)}
+      <div style="min-width:0"><div style="font-weight:600">${esc(c.name)}</div>
+        <div style="font-size:11px;color:var(--faint)">${md?('last data '+esc(md)):'no data'}${stale?' · <span style="color:var(--neg)">stale</span>':''}</div></div>
+      <div class="spacer"></div>
+      ${h&&h.rows_written!=null?`<span class="tnum" style="font-size:12px;color:var(--faint)">${h.rows_written} rows</span>`:''}
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:${col}"><span style="width:8px;height:8px;border-radius:50%;background:${col}"></span>${esc(label)}</span>
+      <span style="font-size:11px;color:var(--faint);min-width:64px;text-align:right">${h?timeAgo(h.created_at):''}</span>
+    </div>`;
+  }).join('');
+  const errs=(state.runHealth||[]).filter(h=>['error','failure','cancelled'].includes(h.status)).slice(0,6);
+  const errHTML = errs.length? `<div style="margin-top:14px"><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;margin-bottom:8px">Recent failures</div>`+
+    errs.map(e=>`<div style="background:color-mix(in srgb,var(--neg) 7%,transparent);border:1px solid color-mix(in srgb,var(--neg) 22%,transparent);border-radius:8px;padding:9px 11px;margin-bottom:7px">
+      <div style="font-size:12px;font-weight:600;color:var(--neg)">${esc(e.client_name||'run')} · ${esc(e.status)} · ${timeAgo(e.created_at)}</div>
+      ${e.error?`<pre style="margin:6px 0 0;font-size:11px;color:var(--faint);white-space:pre-wrap;font-family:var(--font-mono);max-height:96px;overflow:auto">${esc(String(e.error).slice(-600))}</pre>`:''}</div>`).join('')+`</div>` : '';
+  const healthCard = `<div class="card"><div class="hd"><div><h3>Run health</h3><p>Per-client status of the daily run · crashes surface here</p></div></div>
+    <div class="bd">${state.clients.length?clientHealth:'<div class="note">No clients.</div>'}${errHTML}
+      ${errs.length?'':'<div style="margin-top:12px;font-size:11.5px;color:var(--pos)">No failures logged. 🎉</div>'}</div></div>`;
+
+  // Console link cards
+  const linkBtns = links => links.map(([lbl,url])=>`<a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener" style="padding:5px 10px;font-size:12px">${esc(lbl)} ${extIcon()}</a>`).join('');
+  const provConsoles = CONSOLES.providers.map(s=>{ const meta=MODEL_META[s.model];
+    return `<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--border)">
+      ${svcLogo(meta.domain,meta.name)}
+      <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(meta.name)}</div>
+        <div style="font-size:11px;color:var(--faint);font-family:var(--font-mono);margin-top:2px">${esc(s.secret)}</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">${linkBtns(s.links)}</div></div></div>`; }).join('');
+  const infraConsoles = CONSOLES.infra.map(s=>
+    `<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--border)">
+      ${svcLogo(s.domain,s.name)}
+      <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(s.name)}</div>
+        <div style="font-size:11px;color:var(--faint);font-family:var(--font-mono);margin-top:2px">${esc(s.secret)}</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">${linkBtns(s.links)}</div></div></div>`).join('');
+  const consoleCard = `<div class="grid two" style="grid-template-columns:1fr 1fr;margin-top:16px">
+    <div class="card"><div class="hd"><div><h3>AI provider consoles</h3><p>Keys, usage & billing — one click</p></div></div><div class="bd">${provConsoles}</div></div>
+    <div class="card"><div class="hd"><div><h3>Infrastructure</h3><p>Database, the daily run, logos</p></div></div><div class="bd">${infraConsoles}</div></div>
+  </div>`;
+
+  $('content').innerHTML = tiles
+    + `<div class="grid two" style="grid-template-columns:1.1fr 1fr;margin-top:16px">${spendCard}${healthCard}</div>`
+    + consoleCard;
 }
 
 // ---------- RENDER: client detail ----------
@@ -1291,6 +1425,7 @@ window.openClient=function(id){ state.view='client'; state.clientId=id; state.ta
 window.setTab=function(t){ state.view='client'; state.tab=t; render(); };
 function render(){ renderNav();
   if(state.view==='clients') renderClients();
+  else if(state.view==='ops') renderOps();
   else if(state.view==='prompt') renderPromptPage();
   else renderClient();
   window.scrollTo(0,0);
