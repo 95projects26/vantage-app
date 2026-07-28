@@ -365,10 +365,10 @@ const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], 
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
-const LIVE_MODELS = ['openai','anthropic','perplexity','gemini']; // platforms with API keys configured (aio not yet built)
+const LIVE_MODELS = ['openai','anthropic','perplexity','gemini','aio']; // platforms wired (aio = Google AI Overviews via DataForSEO)
 // Rough estimated USD per result row = one model's web-search answer + its Haiku
 // analyzer call. Ballpark from current pricing; edit to match your real bills.
-const MODEL_COST = { openai:0.045, anthropic:0.06, perplexity:0.018, gemini:0.012, aio:0 };
+const MODEL_COST = { openai:0.045, anthropic:0.06, perplexity:0.018, gemini:0.012, aio:0.008 };
 const estCost = rows => rows.reduce((s,r)=> s + (MODEL_COST[r.model]||0), 0);
 function costForDate(dateStr){ return estCost(state.results.filter(r=>r.run_date===dateStr)); }
 // { latest, latestDate, d7, d30 } estimated run cost across all clients.
