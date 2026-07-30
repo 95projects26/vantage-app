@@ -75,6 +75,8 @@
   .btn.danger:hover{filter:brightness(.94)}
   .rowbtn{width:28px;height:28px;border-radius:7px;border:1px solid transparent;background:none;color:var(--faint);display:inline-grid;place-items:center}
   .rowbtn:hover{color:var(--neg);background:var(--neg-weak);border-color:var(--neg-weak)}
+  .freqsel{font:inherit;font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer}
+  .freqsel:hover{border-color:var(--accent)}
   .rowbtn svg{width:15px;height:15px}
   .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:2px}
   .seg button{border:none;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px}
@@ -370,6 +372,20 @@ const LIVE_MODELS = ['openai','anthropic','perplexity','gemini','aio']; // platf
 // analyzer call. Ballpark from current pricing; edit to match your real bills.
 const MODEL_COST = { openai:0.045, anthropic:0.06, perplexity:0.018, gemini:0.012, aio:0.008 };
 const estCost = rows => rows.reduce((s,r)=> s + (MODEL_COST[r.model]||0), 0);
+// Per-prompt cadence: days between runs, and runs/month, for cost math.
+const FREQ_DAYS = { daily:1, every_other_day:2, twice_weekly:3, weekly:7, monthly:30 };
+const runsPerMonth = f => f==='off' ? 0 : 30/(FREQ_DAYS[f]||7);
+const enabledModelsFor = c => { const m=(c.models||[]).filter(x=>LIVE_MODELS.includes(x)); return m.length?m:LIVE_MODELS; };
+// Estimated $/month for one prompt = each enabled model at the SLOWER of prompt & model cadence.
+function promptMonthlyCost(c, p){
+  const pf=p.frequency||'weekly'; if(pf==='off') return 0;
+  return enabledModelsFor(c).reduce((s,m)=>{
+    const mf=(c.model_freq&&c.model_freq[m])||c.frequency||'daily';
+    const days=Math.max(FREQ_DAYS[pf]||7, FREQ_DAYS[mf]||1);
+    return s + (MODEL_COST[m]||0)*(30/days);
+  },0);
+}
+const clientMonthlyCost = c => clientPrompts(c.id).reduce((s,p)=>s+promptMonthlyCost(c,p),0);
 function costForDate(dateStr){ return estCost(state.results.filter(r=>r.run_date===dateStr)); }
 // { latest, latestDate, d7, d30 } estimated run cost across all clients.
 function costSummary(){
@@ -888,18 +904,24 @@ function promptsHTML(c){
   const byPrompt=groupBy(rows,'prompt_text');
   const groups={branded:[],unbranded:[]};
   ps.forEach(p=>groups[p.kind==='branded'?'branded':'unbranded'].push(p));
+  const freqSel=p=>`<select class="freqsel" onclick="event.stopPropagation()" onchange="event.stopPropagation();setPromptFreq('${p.id}',this.value)">`+
+    FREQ_OPTS.map(([v,l])=>`<option value="${v}"${(p.frequency||'weekly')===v?' selected':''}>${l}</option>`).join('')+`</select>`;
   function grp(title,arr){ if(!arr.length) return '';
     const body=arr.map(p=>{
       const rs=byPrompt[p.text]||[]; const vis=rs.length?Math.round(rs.filter(r=>r.client_mentioned).length/rs.length*100):null;
-      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')"><td style="max-width:340px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
-        <td class="tnum">${vis==null?'—':vis+'%'}</td><td><span class="chip pos dot" style="font-size:10.5px">Active</span></td>
+      const mc=promptMonthlyCost(c,p);
+      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')"><td style="max-width:300px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
+        <td class="tnum">${vis==null?'—':vis+'%'}</td><td>${freqSel(p)}</td>
+        <td class="tnum" style="color:var(--faint)">${(p.frequency||'weekly')==='off'?'—':'$'+mc.toFixed(2)+'/mo'}</td>
         <td style="width:38px;text-align:right"><button class="rowbtn" title="Delete prompt" onclick="event.stopPropagation();deletePrompt('${p.id}')">${trashIcon()}</button></td></tr>`;
     }).join('');
-    return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+    return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Cadence</th><th>Est. cost</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   }
-  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${new Set(rows.map(r=>r.model)).size||0} models</div><div class="spacer"></div>
+  const total=clientMonthlyCost(c), enM=enabledModelsFor(c);
+  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${enM.length} models · <b style="color:var(--text)">~$${total.toFixed(2)}/mo</b> estimated at these cadences</div><div class="spacer"></div>
     <button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
     <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>
+    <div class="note" style="margin-top:12px"><b>Cadence</b> sets how often each prompt runs. Daily = defend your winners; weekly/monthly = track the long tail cheaply. Cost is estimated from cadence × enabled models; only DataForSEO shows a real balance (Backend tab).</div>
     <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
       <div><div style="font-weight:600;font-size:13px">Danger zone</div><div style="font-size:12px;color:var(--faint)">Deleting a client removes all of its prompts and history permanently.</div></div>
       <div class="spacer"></div>
@@ -1132,7 +1154,7 @@ window.savePrompt=async function(cid){
   closeModal(); toast('Prompt added, running it now'); await loadAll(); render(); startRun(cid);
 };
 function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
-const FREQ_OPTS=[['off','Off'],['daily','Daily'],['every_other_day','Every other day'],['twice_weekly','Twice a week'],['weekly','Weekly']];
+const FREQ_OPTS=[['off','Off'],['daily','Daily'],['every_other_day','Every other day'],['twice_weekly','Twice a week'],['weekly','Weekly'],['monthly','Monthly']];
 window.clientSettingsModal=function(cid){
   const c=state.clients.find(x=>x.id===cid); if(!c) return;
   const mf=c.model_freq||{};
@@ -1176,6 +1198,13 @@ window.deletePrompt=async function(id){
   const { error } = await sb.from('prompts').delete().eq('id', id);
   if(error){ toast('Error: '+error.message); return; }
   toast('Prompt deleted'); await loadAndRender();
+};
+window.setPromptFreq=async function(id, freq){
+  const p=(state.prompts||[]).find(x=>x.id===id); if(p) p.frequency=freq;  // optimistic
+  render();
+  const { error } = await sb.from('prompts').update({ frequency:freq }).eq('id', id);
+  if(error){ toast('Error: '+error.message); await loadAndRender(); return; }
+  toast('Cadence updated · '+freq.replace(/_/g,' '));
 };
 window.deleteClient=async function(id){
   const c=state.clients.find(x=>x.id===id); const nm=c?c.name:'this client';
