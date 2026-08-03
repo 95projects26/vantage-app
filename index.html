@@ -75,6 +75,12 @@
   .btn.danger:hover{filter:brightness(.94)}
   .rowbtn{width:28px;height:28px;border-radius:7px;border:1px solid transparent;background:none;color:var(--faint);display:inline-grid;place-items:center}
   .rowbtn:hover{color:var(--neg);background:var(--neg-weak);border-color:var(--neg-weak)}
+  .pitchcard{border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);background:color-mix(in srgb,var(--accent) 4%,var(--panel))}
+  .plabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;margin-bottom:8px}
+  .pchips{display:flex;flex-wrap:wrap;gap:7px}
+  .pchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);border-radius:999px;padding:3px 11px 3px 4px}
+  .plist{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.7}
+  .plist li{margin-bottom:3px}
   .freqsel{font:inherit;font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer}
   .freqsel:hover{border-color:var(--accent)}
   .pcheck{width:15px;height:15px;cursor:pointer;accent-color:var(--accent);vertical-align:middle}
@@ -854,7 +860,7 @@ function overviewHTML(c){
   // source URLs (the actionable ones), over the active window
   const urls=aggUrlRows(windowRows(c.id, state.windowDays));
   const srcHTML = urls.length? urls.slice(0,8).map(s=>urlRowHTML(s, c.id)).join('') : `<div class="note">No source URLs captured yet.</div>`;
-  return tiles +
+  return (c.status==='pitch'?pitchSummaryCard(c,s):'') + tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
       <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Where you win and lose, per model</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
       <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
@@ -867,6 +873,39 @@ function overviewHTML(c){
 function tile(lab,val,sub,strip,valColor,fs){
   return `<div class="tile"><span class="strip" style="background:${strip}"></span>
     <div class="lab">${lab}</div><div class="val tnum" style="${valColor?'color:'+valColor+';':''}${fs?'font-size:'+fs+'px;margin-top:12px':''}">${esc(val)}</div><div class="sub">${esc(sub)}</div></div>`;
+}
+// Pitch snapshot: the TL;DR card shown at the top of a PITCH account's Overview for screen-shares.
+function pitchSummaryCard(c, s){
+  const W=state.windowDays;
+  const unb=windowRows(c.id,W).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
+  const nModels=new Set(unb.map(r=>r.model)).size;
+  const rivals=s.board.filter(b=>b.n!==c.name).slice(0,5);
+  const own=(c.name||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,6);
+  const domc={};
+  unb.forEach(r=>(r.cited_domains||[]).forEach(d=>{ if(d && !d.replace(/[^a-z0-9]/gi,'').toLowerCase().includes(own)) domc[d]=(domc[d]||0)+1; }));
+  const topDoms=Object.entries(domc).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const nQ=s.unbTotal, hit=s.unbMent, miss=nQ-hit;
+  const visColor=s.vis<40?'var(--neg)':(s.vis<70?'var(--neu)':'var(--pos)');
+  const rivalHTML=rivals.length?rivals.map(b=>`<span class="pchip">${brandChip(b.n)}${esc(b.n)}</span>`).join(''):'<span class="sub">None named yet.</span>';
+  const domHTML=topDoms.length?topDoms.map(([d])=>`<span class="pchip">${favChip(d)}${esc(d)}</span>`).join(''):'<span class="sub">No external sources cited yet.</span>';
+  return `<div class="card pitchcard" style="margin-bottom:16px"><div class="bd">
+    <div class="eyebrow" style="color:var(--accent)">Pitch snapshot</div>
+    <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:6px 0 2px">
+      <div class="tnum" style="font-size:46px;font-weight:720;color:${visColor};line-height:1">${s.vis}%</div>
+      <div style="font-size:15px;max-width:600px;line-height:1.5">of the buyer questions we put to AI, <b>${esc(c.name)}</b> shows up in. That is <b>${hit} of ${nQ}</b> answers across ${nModels} AI engine${nModels===1?'':'s'}.${miss>0?` <b>${miss}</b> are openings where a competitor is recommended instead.`:''}</div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:20px;margin-top:16px">
+      <div><div class="plabel">Who AI recommends instead</div><div class="pchips">${rivalHTML}</div></div>
+      <div><div class="plabel">Where those answers are pulled from</div><div class="pchips">${domHTML}</div></div>
+    </div>
+    <div class="plabel" style="margin-top:18px">How ${esc(c.name)} gets in the answer</div>
+    <ul class="plist">
+      <li><b>Presence and authority:</b> earn a spot on the publications and directories AI already cites. We name them, ranked by domain authority.</li>
+      <li><b>Content:</b> publish the pages these answers reward, for the exact questions you are absent on. We provide the angles.</li>
+      <li><b>Then we watch it move:</b> this view updates as we work, so you see the percentage climb.</li>
+    </ul>
+    <div class="sub" style="margin-top:11px">Opportunity snapshot, not a guarantee. Some sources will not feature every brand. This shows where the game is won and where the openings are.</div>
+  </div></div>`;
 }
 function promptPerfTable(c, models){
   const ps=clientPrompts(c.id);
