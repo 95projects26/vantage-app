@@ -79,6 +79,10 @@
   .plabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;margin-bottom:8px}
   .pchips{display:flex;flex-wrap:wrap;gap:7px}
   .pchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;background:var(--panel-2);border:1px solid var(--border);border-radius:999px;padding:3px 11px 3px 4px}
+  .seg{display:inline-flex;gap:2px;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:2px}
+  .segbtn{font:inherit;font-size:12px;font-weight:600;color:var(--faint);background:none;border:none;border-radius:7px;padding:4px 11px;cursor:pointer}
+  .segbtn:hover{color:var(--text)}
+  .segbtn.on{background:var(--panel);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.06)}
   .plist{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.7}
   .plist li{margin-bottom:3px}
   .freqsel{font:inherit;font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer}
@@ -372,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -1128,9 +1132,10 @@ window.openSource=function(cid, encUrl){
 };
 window.openPromptPage=function(cid, encText){
   closeDrawer();
-  state.view='prompt'; state.clientId=cid; state.promptText=decodeURIComponent(encText);
+  state.view='prompt'; state.clientId=cid; state.promptText=decodeURIComponent(encText); state.ansFilter='all';
   render();
 };
+window.setAnsFilter=function(f){ state.ansFilter=f; render(); };
 window.closeDrawer=()=>$('drawer').classList.add('hide');
 
 // full chronological feed of every answer
@@ -1561,10 +1566,15 @@ function renderPromptPage(){
     return `<div title="${esc(d.date)}: ${m}/${t}" style="flex:1;min-width:14px;display:flex;flex-direction:column;align-items:center;gap:4px">
       <div style="width:100%;height:${Math.max(6,pct*0.5)}px;min-height:6px;background:${col};border-radius:3px"></div>
       <div style="font-size:9px;color:var(--faint);font-family:var(--font-mono)">${esc(d.date.slice(5))}</div></div>`;}).join('');
-  const days=hist.map((day,i)=>
-    `<div class="dayhead"><span>${esc(day.date)}</span>${i===0?'<span class="daynow">latest</span>':''}<span class="daycount">${day.rows.filter(r=>r.client_mentioned).length}/${day.rows.length} mentioned</span></div>`
-    + day.rows.map(answerCard).join('')
-  ).join('');
+  const af=state.ansFilter||'all';
+  const afPred = r => af==='all'?true : af==='shown'?r.client_mentioned : af==='absent'?!r.client_mentioned : af==='featured'?(r.client_prominence==='featured') : true;
+  const days=hist.map((day,i)=>{
+    const rows=day.rows.filter(afPred); if(!rows.length) return '';
+    return `<div class="dayhead"><span>${esc(day.date)}</span>${i===0?'<span class="daynow">latest</span>':''}<span class="daycount">${day.rows.filter(r=>r.client_mentioned).length}/${day.rows.length} mentioned</span></div>`
+      + rows.map(answerCard).join('');
+  }).join('');
+  const afBtn=(v,l)=>`<button class="segbtn ${af===v?'on':''}" onclick="setAnsFilter('${v}')">${l}</button>`;
+  const ansSeg=`<div class="seg">${afBtn('all','All')}${afBtn('shown','Shown in')}${afBtn('featured','Featured')}${afBtn('absent','Absent')}</div>`;
   // per-prompt sources over the window
   const domSrc=aggSources(wrows);
   const domHTML = domSrc.length? domSrc.slice(0,15).map(srcLine).join('') : `<div class="note">No citations captured.</div>`;
@@ -1581,8 +1591,8 @@ function renderPromptPage(){
       <div class="card"><div class="hd"><div><h3>Domain sources</h3><p>How often each domain is cited on this prompt</p></div></div><div class="bd">${domHTML}</div></div>
       <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages the models pulled from</p></div></div><div class="bd">${urlHTML}</div></div>
     </div>
-    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every answer over time</h3><p>Newest first, grouped by day</p></div></div>
-      <div class="bd phist">${days}</div></div>`;
+    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every answer over time</h3><p>Newest first, grouped by day</p></div><div class="spacer"></div>${ansSeg}</div>
+      <div class="bd phist">${days||`<div class="note">No answers where you're ${af==='shown'?'shown':af==='featured'?'featured':af==='absent'?'absent':'—'} in this window.</div>`}</div></div>`;
 }
 window.loadAndRender=async function(){ await loadAll(); render(); };
 window.runNow=function(){ startRun(state.clientId); };
