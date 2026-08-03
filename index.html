@@ -843,9 +843,8 @@ function overviewHTML(c){
       <td><div class="brandcell">${me?clientAvatar(c):brandChip(b.n)}${esc(b.n)}</div></td>
       <td style="width:120px"><div style="display:flex;align-items:center;gap:8px"><div class="bar"><i style="width:${pct}%;background:${col}"></i></div><span class="tnum" style="font-size:12px;font-weight:600">${pct}%</span></div></td></tr>`;
   }).join('')}</tbody></table>` : `<div class="note">No unbranded prompts yet.</div>`;
-  // prompt performance
-  const models=[...new Set(rows.map(r=>r.model))];
-  const perf = promptPerfTable(c, models);
+  // prompt performance (rolling window: shows the best result per prompt/model in the window)
+  const perf = promptPerfTable(c);
   // latest answers
   const ans = rows.slice().sort((a,b)=> (a.client_mentioned===b.client_mentioned)?0:(a.client_mentioned?-1:1)).slice(0,5).map(r=>{
     const mb=MB(r.model);
@@ -862,7 +861,7 @@ function overviewHTML(c){
   const srcHTML = urls.length? urls.slice(0,8).map(s=>urlRowHTML(s, c.id)).join('') : `<div class="note">No source URLs captured yet.</div>`;
   return (c.status==='pitch'?pitchSummaryCard(c,s):'') + tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
-      <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Where you win and lose, per model</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
+      <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Best result per model, over the selected window</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
       <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
     </div>
     <div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
@@ -906,20 +905,28 @@ function pitchSummaryCard(c, s){
     </ul>
   </div></div>`;
 }
-function promptPerfTable(c, models){
+// Rolling-window prompt table: for each prompt x model, show the BEST result seen anywhere
+// in the selected window (Featured > Listed > Absent). If it showed up any day, it shows up —
+// no false "Absent" just because it didn't run on the very latest date. "—" = didn't run in window.
+function promptPerfTable(c){
   const ps=clientPrompts(c.id);
-  const rows=latestRows(c.id);
+  const rows=windowRows(c.id, state.windowDays);
+  const present=new Set(rows.map(r=>r.model));
+  const models=CANON_MODELS.filter(m=>present.has(m));
   const head=`<thead><tr><th>Prompt</th><th>Type</th>${models.map(m=>`<th>${MB(m).n}</th>`).join('')}<th>Sentiment</th></tr></thead>`;
-  const byPrompt={};
-  rows.forEach(r=>{ (byPrompt[r.prompt_text]=byPrompt[r.prompt_text]||{})[r.model]=r; });
-  const texts=[...new Set([...ps.map(p=>p.text), ...Object.keys(byPrompt)])];
+  const byPM={};
+  rows.forEach(r=>{ const p=byPM[r.prompt_text]=byPM[r.prompt_text]||{}; (p[r.model]=p[r.model]||[]).push(r); });
+  const texts=[...new Set([...ps.map(p=>p.text), ...Object.keys(byPM)])];
   const body=texts.map(t=>{
-    const kind=promptKind(c.id,t);
-    const cells=models.map(m=>{ const r=byPrompt[t]&&byPrompt[t][m];
-      if(!r) return `<td><span class="chip off">—</span></td>`;
-      return `<td><span class="chip ${r.client_mentioned?'pos':'off'}">${r.client_mentioned?(r.client_prominence==='featured'?'Featured':'Listed'):'Absent'}</span></td>`; }).join('');
-    const anyR=byPrompt[t]?Object.values(byPrompt[t])[0]:null;
-    const sc=SENTCHIP(anyR&&anyR.client_mentioned?bestSentiment(byPrompt[t]):null);
+    const kind=promptKind(c.id,t); const pm=byPM[t]||{};
+    const cells=models.map(m=>{ const rs=pm[m];
+      if(!rs||!rs.length) return `<td><span class="chip off">—</span></td>`;
+      const feat=rs.some(r=>r.client_mentioned&&r.client_prominence==='featured');
+      const ment=rs.some(r=>r.client_mentioned);
+      const label=feat?'Featured':(ment?'Listed':'Absent');
+      return `<td><span class="chip ${ment?'pos':'off'}">${label}</span></td>`; }).join('');
+    const mented=Object.values(pm).flat().filter(r=>r.client_mentioned);
+    const sc=SENTCHIP(mented.length?bestSentiment(mented):null);
     return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(t)}')"><td style="max-width:320px;font-weight:550">${esc(t)} <span class="viewcue">read${chev()}</span></td>
       <td><span class="chip ${kind==='branded'?'neu':'off'}">${kind}</span></td>${cells}<td><span class="chip ${sc[0]}">${sc[1]}</span></td></tr>`;
   }).join('');
