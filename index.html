@@ -889,7 +889,7 @@ function pitchSummaryCard(c, s){
   const rivalHTML=rivals.length?rivals.map(b=>`<span class="pchip">${brandChip(b.n)}${esc(b.n)}</span>`).join(''):'<span class="sub">None named yet.</span>';
   const domHTML=topDoms.length?topDoms.map(([d])=>`<span class="pchip">${favChip(d)}${esc(d)}</span>`).join(''):'<span class="sub">No external sources cited yet.</span>';
   return `<div class="card pitchcard" style="margin-bottom:16px"><div class="bd">
-    <div class="eyebrow" style="color:var(--accent)">Pitch snapshot</div>
+    <div class="eyebrow" style="color:var(--accent)">Snapshot</div>
     <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:6px 0 2px">
       <div class="tnum" style="font-size:46px;font-weight:720;color:${visColor};line-height:1">${s.vis}%</div>
       <div style="font-size:15px;max-width:600px;line-height:1.5">of the buyer questions we put to AI, <b>${esc(c.name)}</b> shows up in. That is <b>${hit} of ${nQ}</b> answers across ${nModels} AI engine${nModels===1?'':'s'}.${miss>0?` <b>${miss}</b> are openings where a competitor is recommended instead.`:''}</div>
@@ -904,7 +904,6 @@ function pitchSummaryCard(c, s){
       <li><b>Content:</b> publish the pages these answers reward, for the exact questions you are absent on. We provide the angles.</li>
       <li><b>Then we watch it move:</b> this view updates as we work, so you see the percentage climb.</li>
     </ul>
-    <div class="sub" style="margin-top:11px">Opportunity snapshot, not a guarantee. Some sources will not feature every brand. This shows where the game is won and where the openings are.</div>
   </div></div>`;
 }
 function promptPerfTable(c, models){
