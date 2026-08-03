@@ -77,6 +77,9 @@
   .rowbtn:hover{color:var(--neg);background:var(--neg-weak);border-color:var(--neg-weak)}
   .freqsel{font:inherit;font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer}
   .freqsel:hover{border-color:var(--accent)}
+  .pcheck{width:15px;height:15px;cursor:pointer;accent-color:var(--accent);vertical-align:middle}
+  .btn.sm{padding:4px 10px;font-size:12px}
+  .bulkbar{position:sticky;top:8px;z-index:6;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:9px 14px;border-radius:10px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);box-shadow:0 4px 14px rgba(0,0,0,.06)}
   .rowbtn svg{width:15px;height:15px}
   .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:2px}
   .seg button{border:none;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px}
@@ -363,7 +366,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -910,18 +913,26 @@ function promptsHTML(c){
     const body=arr.map(p=>{
       const rs=byPrompt[p.text]||[]; const vis=rs.length?Math.round(rs.filter(r=>r.client_mentioned).length/rs.length*100):null;
       const mc=promptMonthlyCost(c,p);
-      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')"><td style="max-width:300px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
+      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')">
+        <td style="width:30px"><input type="checkbox" class="pcheck" data-id="${p.id}" ${state.selPrompts.has(p.id)?'checked':''} onclick="event.stopPropagation();togglePromptSel('${p.id}',this.checked)"></td>
+        <td style="max-width:280px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
         <td class="tnum">${vis==null?'—':vis+'%'}</td><td>${freqSel(p)}</td>
         <td class="tnum" style="color:var(--faint)">${(p.frequency||'weekly')==='off'?'—':'$'+mc.toFixed(2)+'/mo'}</td>
         <td style="width:38px;text-align:right"><button class="rowbtn" title="Delete prompt" onclick="event.stopPropagation();deletePrompt('${p.id}')">${trashIcon()}</button></td></tr>`;
     }).join('');
-    return `<div class="promptgroup">${title}</div><table><thead><tr><th>Prompt</th><th>Visibility</th><th>Cadence</th><th>Est. cost</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+    return `<div class="promptgroup">${title}</div><table><thead><tr>
+      <th style="width:30px"><input type="checkbox" class="pcheck" title="Select all in this group" onclick="selectAllGroup(this)"></th>
+      <th>Prompt</th><th>Visibility</th><th>Cadence</th><th>Est. cost</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   }
-  const total=clientMonthlyCost(c), enM=enabledModelsFor(c);
+  const total=clientMonthlyCost(c), enM=enabledModelsFor(c), sel=state.selPrompts;
+  const bulkBtns=FREQ_OPTS.map(([v,l])=>`<button class="btn ghost sm" onclick="bulkSetFreq('${v}')">${l}</button>`).join('');
   return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${enM.length} models · <b style="color:var(--text)">~$${total.toFixed(2)}/mo</b> estimated at these cadences</div><div class="spacer"></div>
     <button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
+    <div id="bulkbar" class="bulkbar" style="display:${sel.size?'flex':'none'}">
+      <b id="bulkcount">${sel.size} selected</b><span style="color:var(--faint);font-size:12px">Set cadence:</span>${bulkBtns}
+      <div class="spacer"></div><button class="btn ghost sm" onclick="clearPromptSel()">Clear</button></div>
     <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>
-    <div class="note" style="margin-top:12px"><b>Cadence</b> sets how often each prompt runs. Daily = defend your winners; weekly/monthly = track the long tail cheaply. Cost is estimated from cadence × enabled models; only DataForSEO shows a real balance (Backend tab).</div>
+    <div class="note" style="margin-top:12px"><b>Cadence</b> sets how often each prompt runs. Daily = defend your winners; weekly/monthly = track the long tail cheaply. Tick prompts to change several at once. Cost is estimated from cadence × enabled models; only DataForSEO shows a real balance (Backend tab).</div>
     <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
       <div><div style="font-weight:600;font-size:13px">Danger zone</div><div style="font-size:12px;color:var(--faint)">Deleting a client removes all of its prompts and history permanently.</div></div>
       <div class="spacer"></div>
@@ -1206,6 +1217,25 @@ window.setPromptFreq=async function(id, freq){
   if(error){ toast('Error: '+error.message); await loadAndRender(); return; }
   toast('Cadence updated · '+freq.replace(/_/g,' '));
 };
+// --- Bulk prompt selection (no full re-render on toggle, to keep scroll position) ---
+function updateBulkBar(){ const bar=$('bulkbar'); if(!bar) return; const n=state.selPrompts.size;
+  bar.style.display=n?'flex':'none'; const c=$('bulkcount'); if(c) c.textContent=n+' selected'; }
+window.togglePromptSel=function(id, checked){ checked?state.selPrompts.add(id):state.selPrompts.delete(id); updateBulkBar(); };
+window.selectAllGroup=function(el){ const tbl=el.closest('table'); if(!tbl) return;
+  tbl.querySelectorAll('.pcheck[data-id]').forEach(cb=>{ cb.checked=el.checked;
+    el.checked?state.selPrompts.add(cb.dataset.id):state.selPrompts.delete(cb.dataset.id); });
+  updateBulkBar(); };
+window.clearPromptSel=function(){ state.selPrompts.clear();
+  document.querySelectorAll('.pcheck').forEach(cb=>cb.checked=false); updateBulkBar(); };
+window.bulkSetFreq=async function(freq){
+  const ids=[...state.selPrompts]; if(!ids.length) return;
+  const { error } = await sb.from('prompts').update({ frequency:freq }).in('id', ids);
+  if(error){ toast('Error: '+error.message); return; }
+  state.prompts.forEach(p=>{ if(state.selPrompts.has(p.id)) p.frequency=freq; });
+  state.selPrompts.clear();
+  toast(`Set ${ids.length} prompt${ids.length>1?'s':''} to ${freq.replace(/_/g,' ')}`);
+  render();
+};
 window.deleteClient=async function(id){
   const c=state.clients.find(x=>x.id===id); const nm=c?c.name:'this client';
   if(!confirm('Delete "'+nm+'" and ALL of its prompts, answers and history? This cannot be undone.')) return;
@@ -1459,9 +1489,9 @@ function filterControls(cid){
 function winText(){ return state.windowDays>=3650 ? 'all time' : 'last '+state.windowDays+' days'; }
 window.setWindow=function(d){ state.windowDays=d; render(); };
 window.setModel=function(m){ state.modelFilter=m; render(); };
-window.go=function(v){ state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
-window.openClient=function(id){ state.view='client'; state.clientId=id; state.tab='overview'; render(); };
-window.setTab=function(t){ state.view='client'; state.tab=t; render(); };
+window.go=function(v){ state.selPrompts.clear(); state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
+window.openClient=function(id){ state.selPrompts.clear(); state.view='client'; state.clientId=id; state.tab='overview'; render(); };
+window.setTab=function(t){ state.selPrompts.clear(); state.view='client'; state.tab=t; render(); };
 function render(){ renderNav();
   if(state.view==='clients') renderClients();
   else if(state.view==='ops') renderOps();
