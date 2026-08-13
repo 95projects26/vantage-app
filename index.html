@@ -376,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -590,7 +590,7 @@ function summary(cid){
 // ---------- RENDER: shell ----------
 function renderNav(){
   const nav=$('nav');
-  if(state.view==='clients' || state.view==='ops'){
+  if(!isClient() && (state.view==='clients' || state.view==='ops')){
     nav.innerHTML = navBtn('clients','Clients',state.view==='clients',gridIcon())
       + navBtn('ops','Backend',state.view==='ops',serverIcon());
   } else {
@@ -598,7 +598,7 @@ function renderNav(){
     nav.innerHTML = '<div class="navlbl">'+esc(c?c.name:'')+'</div>'+
       ['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'explorer','Prompt Explorer',compassIcon(),'answers','Answers',chatIcon(),'actions','Actions',boltIcon(),'competitors','Competitor Analysis',peopleIcon(),'perception','AI Perception',eyeIcon2(),'sources','Cited sources',linkIcon()]
       .reduce((acc,_,i,a)=> i%3===0? acc+navTab(a[i],a[i+1],a[i+2]) : acc, '') +
-      '<div class="navsec" style="padding:0"><button class="navitem" onclick="go(\'clients\')" style="margin-top:8px">'+backIcon()+'All clients</button></div>';
+      (isClient()?'':'<div class="navsec" style="padding:0"><button class="navitem" onclick="go(\'clients\')" style="margin-top:8px">'+backIcon()+'All clients</button></div>');
   }
 }
 const navBtn=(v,l,active,icon)=>`<button class="navitem ${active?'active':''}" onclick="go('${v}')">${icon}${l}</button>`;
@@ -798,12 +798,13 @@ function renderOps(){
 function renderClient(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
   const titles={overview:'Overview',prompts:'Prompts',explorer:'Prompt Explorer',answers:'All answers',actions:'Actions',competitors:'Competitor Analysis',perception:'AI Perception',sources:'Cited sources'};
-  $('topbar').innerHTML = `<div><div class="crumb"><a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b></div><div class="h1">${titles[state.tab]}</div></div>
+  const crumb = isClient() ? `<b>${esc(c.name)}</b>` : `<a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b>`;
+  $('topbar').innerHTML = `<div><div class="crumb">${crumb}</div><div class="h1">${titles[state.tab]}</div></div>
     <div class="spacer"></div>
     ${filterControls(c.id)}
-    <button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
-    <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`;
+    ${isClient()?'':`<button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`}`;
   const tabbar = `<div class="tabs">`+
     ['overview','Overview','prompts','Prompts','explorer','Prompt Explorer','answers','Answers','actions','Actions','competitors','Competitor Analysis','perception','AI Perception','sources','Cited sources']
     .reduce((a,_,i,arr)=> i%2===0? a+`<button class="tab ${state.tab===arr[i]?'on':''}" onclick="setTab('${arr[i]}')">${arr[i+1]}</button>`:a,'')+`</div>`;
@@ -956,36 +957,40 @@ function promptsHTML(c){
   const byPrompt=groupBy(rows,'prompt_text');
   const groups={branded:[],unbranded:[]};
   ps.forEach(p=>groups[p.kind==='branded'?'branded':'unbranded'].push(p));
+  const cl=isClient();
   const freqSel=p=>`<select class="freqsel" onclick="event.stopPropagation()" onchange="event.stopPropagation();setPromptFreq('${p.id}',this.value)">`+
     FREQ_OPTS.map(([v,l])=>`<option value="${v}"${(p.frequency||'weekly')===v?' selected':''}>${l}</option>`).join('')+`</select>`;
   function grp(title,arr){ if(!arr.length) return '';
     const body=arr.map(p=>{
       const rs=byPrompt[p.text]||[]; const vis=rs.length?Math.round(rs.filter(r=>r.client_mentioned).length/rs.length*100):null;
       const mc=promptMonthlyCost(c,p);
-      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')">
-        <td style="width:30px"><input type="checkbox" class="pcheck" data-id="${p.id}" ${state.selPrompts.has(p.id)?'checked':''} onclick="event.stopPropagation();togglePromptSel('${p.id}',this.checked)"></td>
-        <td style="max-width:280px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
-        <td class="tnum">${vis==null?'—':vis+'%'}</td><td>${freqSel(p)}</td>
+      const teamCells = `<td style="width:30px"><input type="checkbox" class="pcheck" data-id="${p.id}" ${state.selPrompts.has(p.id)?'checked':''} onclick="event.stopPropagation();togglePromptSel('${p.id}',this.checked)"></td>`;
+      const teamTail = `<td>${freqSel(p)}</td>
         <td class="tnum" style="color:var(--faint)">${(p.frequency||'weekly')==='off'?'—':'$'+mc.toFixed(2)+'/mo'}</td>
-        <td style="width:38px;text-align:right"><button class="rowbtn" title="Delete prompt" onclick="event.stopPropagation();deletePrompt('${p.id}')">${trashIcon()}</button></td></tr>`;
+        <td style="width:38px;text-align:right"><button class="rowbtn" title="Delete prompt" onclick="event.stopPropagation();deletePrompt('${p.id}')">${trashIcon()}</button></td>`;
+      return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')">
+        ${cl?'':teamCells}
+        <td style="max-width:340px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
+        <td class="tnum">${vis==null?'—':vis+'%'}</td>${cl?'':teamTail}</tr>`;
     }).join('');
     return `<div class="promptgroup">${title}</div><table><thead><tr>
-      <th style="width:30px"><input type="checkbox" class="pcheck" title="Select all in this group" onclick="selectAllGroup(this)"></th>
-      <th>Prompt</th><th>Visibility</th><th>Cadence</th><th>Est. cost</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+      ${cl?'':'<th style="width:30px"><input type="checkbox" class="pcheck" title="Select all in this group" onclick="selectAllGroup(this)"></th>'}
+      <th>Prompt</th><th>Visibility</th>${cl?'':'<th>Cadence</th><th>Est. cost</th><th></th>'}</tr></thead><tbody>${body}</tbody></table>`;
   }
   const total=clientMonthlyCost(c), enM=enabledModelsFor(c), sel=state.selPrompts;
   const bulkBtns=FREQ_OPTS.map(([v,l])=>`<button class="btn ghost sm" onclick="bulkSetFreq('${v}')">${l}</button>`).join('');
-  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${enM.length} models · <b style="color:var(--text)">~$${total.toFixed(2)}/mo</b> estimated at these cadences</div><div class="spacer"></div>
-    <button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
-    <div id="bulkbar" class="bulkbar" style="display:${sel.size?'flex':'none'}">
+  const tbl=`<div id="bulkbar" class="bulkbar" style="display:${sel.size?'flex':'none'}">
       <b id="bulkcount">${sel.size} selected</b><span style="color:var(--faint);font-size:12px">Set cadence:</span>${bulkBtns}
-      <div class="spacer"></div><button class="btn ghost sm" onclick="clearPromptSel()">Clear</button></div>
-    <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet. Add the searches you want to track.</div>'}</div></div>
-    <div class="note" style="margin-top:12px"><b>Cadence</b> sets how often each prompt runs. Daily = defend your winners; weekly/monthly = track the long tail cheaply. Tick prompts to change several at once. Cost is estimated from cadence × enabled models; only DataForSEO shows a real balance (Backend tab).</div>
+      <div class="spacer"></div><button class="btn ghost sm" onclick="clearPromptSel()">Clear</button></div>`;
+  return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${enM.length} models${cl?'':` · <b style="color:var(--text)">~$${total.toFixed(2)}/mo</b> estimated at these cadences`}</div><div class="spacer"></div>
+    ${cl?'':`<button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button>`}</div>
+    ${cl?'':tbl}
+    <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet.</div>'}</div></div>
+    ${cl?'':`<div class="note" style="margin-top:12px"><b>Cadence</b> sets how often each prompt runs. Daily = defend your winners; weekly/monthly = track the long tail cheaply. Tick prompts to change several at once.</div>
     <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
       <div><div style="font-weight:600;font-size:13px">Danger zone</div><div style="font-size:12px;color:var(--faint)">Deleting a client removes all of its prompts and history permanently.</div></div>
       <div class="spacer"></div>
-      <button class="btn danger" onclick="deleteClient('${c.id}')">${trashIcon()}Delete client</button></div>`;
+      <button class="btn danger" onclick="deleteClient('${c.id}')">${trashIcon()}Delete client</button></div>`}`;
 }
 function lineChart(series, labels){
   const W=760,H=220,pl=34,pr=14,pt=14,pb=26; const vals=series.flatMap(s=>s.data.filter(v=>v!=null));
@@ -1303,7 +1308,7 @@ function prioBars(p){ const x=PRIO[p]||PRIO.medium; return `<span class="prio" t
 function fmtDate(iso){ return (iso||'').slice(0,10); }
 function actionsTabHTML(c){
   const acts=clientActions(c.id);
-  const genBtn=`<button class="btn" onclick="genActions('${c.id}')" ${state.genRunning?'disabled':''}>${state.genRunning?'<span class="mini-spin"></span>Generating…':boltIcon()+'Generate recommendations'}</button>`;
+  const genBtn=isClient()?'':`<button class="btn" onclick="genActions('${c.id}')" ${state.genRunning?'disabled':''}>${state.genRunning?'<span class="mini-spin"></span>Generating…':boltIcon()+'Generate recommendations'}</button>`;
   const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Recommended actions</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">What to build or earn to start showing up in AI answers. Move cards Suggested → To Do → In Progress → Review → Done. Click a card for details, must-haves, sources and comments.</div></div><div class="spacer"></div>${genBtn}</div>`;
   const banner=state.genRunning?`<div class="runbanner"><span class="mini-spin"></span>Analyzing your gaps and writing recommendations. About a minute; they'll appear here automatically.</div>`:'';
   if(!acts.length) return intro+banner+`<div class="note" style="max-width:560px">${infoIcon()}No recommendations yet. Click "Generate recommendations" and 95 Insights will analyze this client's gaps.</div>`;
@@ -1408,7 +1413,7 @@ window.genActions=async function(cid){
 // ---------- PROMPT EXPLORER ----------
 function explorerHTML(c){
   const sug=clientSuggestions(c.id);
-  const genBtn=`<button class="btn" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':compassIcon()+'Generate prompt ideas'}</button>`;
+  const genBtn=isClient()?'':`<button class="btn" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':compassIcon()+'Generate prompt ideas'}</button>`;
   const intro=`<div style="display:flex;align-items:center;margin-bottom:14px"><div><div style="font-weight:600;font-size:13.5px">Prompt Explorer</div><div style="font-size:12.5px;color:var(--faint);max-width:640px">Buyer queries in this client's space worth tracking, ranked by how commonly they're searched. Add the ones that matter.</div></div><div class="spacer"></div>${genBtn}</div>`;
   const banner=state.insightsRunning?`<div class="runbanner"><span class="mini-spin"></span>Mapping topics and prompts for this client's niche. About a minute.</div>`:'';
   if(!sug.length) return intro+banner+`<div class="note" style="max-width:560px">${infoIcon()}No prompt ideas yet. Click "Generate prompt ideas" to map this client's space.</div>`;
@@ -1419,7 +1424,7 @@ function explorerHTML(c){
       const added = s.added || tracked.has((s.prompt_text||'').toLowerCase());
       return `<tr><td style="max-width:420px;font-weight:550">${esc(s.prompt_text)}${s.topic?`<div style="font-size:11px;color:var(--faint);margin-top:2px">${esc(s.topic)}</div>`:''}</td>
         <td style="width:110px"><div style="display:flex;align-items:center;gap:8px"><div class="bar" style="max-width:60px"><i style="width:${Math.min(100,s.volume||0)}%"></i></div><span class="tnum" style="font-size:12px">${s.volume||0}</span></div></td>
-        <td style="width:90px;text-align:right">${added?'<span class="chip pos dot" style="font-size:10.5px">Tracking</span>':`<button class="btn" style="padding:5px 12px" onclick="addSuggestion('${s.id}')">Add</button>`}</td></tr>`;
+        <td style="width:90px;text-align:right">${added?'<span class="chip pos dot" style="font-size:10.5px">Tracking</span>':(isClient()?'':`<button class="btn" style="padding:5px 12px" onclick="addSuggestion('${s.id}')">Add</button>`)}</td></tr>`;
     }).join('')}</tbody></table>`).join('');
   return intro+banner+`<div class="card"><div class="bd" style="padding-top:6px">${body}</div></div>`;
 }
@@ -1485,7 +1490,7 @@ function perceptionHTML(c){
   const p=clientPerception(c.id);
   const bm=(p&&p.by_model)||{};
   const stats=modelStats(c.id); const statsMap={}; stats.forEach(s=>statsMap[s.m]=s);
-  const genBtn=`<button class="btn ghost" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Regenerate'}</button>`;
+  const genBtn=isClient()?'':`<button class="btn ghost" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Regenerate'}</button>`;
   const banner=state.insightsRunning?`<div class="runbanner"><span class="mini-spin"></span>Reading how each model describes this brand.</div>`:'';
   // sentiment over time (respects the model filter)
   const rows=windowRows(c.id, state.windowDays).filter(r=>r.client_mentioned);
@@ -1539,10 +1544,11 @@ function filterControls(cid){
 function winText(){ return state.windowDays>=3650 ? 'all time' : 'last '+state.windowDays+' days'; }
 window.setWindow=function(d){ state.windowDays=d; render(); };
 window.setModel=function(m){ state.modelFilter=m; render(); };
-window.go=function(v){ state.selPrompts.clear(); state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
-window.openClient=function(id){ state.selPrompts.clear(); state.view='client'; state.clientId=id; state.tab='overview'; render(); };
+window.go=function(v){ if(isClient()) return; state.selPrompts.clear(); state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
+window.openClient=function(id){ if(isClient()) return; state.selPrompts.clear(); state.view='client'; state.clientId=id; state.tab='overview'; render(); };
 window.setTab=function(t){ state.selPrompts.clear(); state.view='client'; state.tab=t; render(); };
 function render(){ renderNav();
+  if(isClient() && state.view!=='prompt') state.view='client';
   if(state.view==='clients') renderClients();
   else if(state.view==='ops') renderOps();
   else if(state.view==='prompt') renderPromptPage();
@@ -1627,9 +1633,22 @@ async function boot(){
   if(!session){ $('loading').classList.add('hide'); $('auth').classList.remove('hide'); return; }
   const email=session.user.email||''; state.userEmail=email;
   $('uemail').textContent=email; $('uav').textContent=(email[0]||'?').toUpperCase();
+  // Role: team (full app) vs client (locked to one client, read-only, no cost).
+  const TEAM_RE=/@(95projects\.com|seoforecommerce\.com|95projectsgroup\.com)$/i;
+  state.role = TEAM_RE.test(email) ? 'team' : 'pending';
+  if(state.role!=='team'){
+    const { data:acc } = await sb.from('client_access').select('client_id').eq('email', email).limit(1);
+    if(acc && acc.length){ state.role='client'; state.view='client'; state.clientId=acc[0].client_id; state.tab='overview'; }
+    else { $('loading').classList.add('hide'); $('app').classList.remove('hide'); showNoAccess(email); return; }
+  }
   await loadAll();
   $('loading').classList.add('hide'); $('app').classList.remove('hide');
   render();
+}
+const isClient = () => state.role==='client';
+function showNoAccess(email){
+  $('nav').innerHTML=''; $('topbar').innerHTML='';
+  $('content').innerHTML=`<div class="note" style="max-width:540px;margin:48px auto">${infoIcon()} This account (${esc(email)}) doesn't have access yet. Ask your 95 Projects contact to enable it, or <a onclick="signOut()" style="color:var(--accent);cursor:pointer;font-weight:600">use a different email</a>.</div>`;
 }
 sb.auth.onAuthStateChange((event)=>{ if(event==='SIGNED_IN' && $('app').classList.contains('hide')) boot(); });
 boot();
