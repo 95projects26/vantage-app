@@ -416,6 +416,7 @@ function clientLatestCost(cid){
 // Paste your logo.dev PUBLISHABLE key (pk_...) here to use real brand logos (free tier).
 // It's a client-side publishable key, safe to ship. Empty = fall back to unavatar/favicon.
 const LOGO_DEV_TOKEN = 'pk_SuvgDcJXQKiDfTF06GjgCw';
+const PITCH_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1hMkrxzswMdP7125bAZ9J2DdHPee3ChjpFVkGrgs7E1Q/edit';
 
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -866,7 +867,11 @@ function overviewHTML(c){
   // source URLs (the actionable ones), over the active window
   const urls=aggUrlRows(windowRows(c.id, state.windowDays));
   const srcHTML = urls.length? urls.slice(0,8).map(s=>urlRowHTML(s, c.id)).join('') : `<div class="note">No source URLs captured yet.</div>`;
-  return (c.status==='pitch'?pitchSummaryCard(c,s):'') + tiles +
+  const sheetBtn = isClient() ? '' : `<a href="${PITCH_SHEET_URL}" target="_blank" rel="noopener" class="card" style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px 18px;text-decoration:none;color:inherit;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--panel))">
+      <span style="width:34px;height:34px;border-radius:9px;background:var(--accent-weak);color:var(--accent);display:grid;place-items:center">${linkIcon()}</span>
+      <div style="flex:1"><div style="font-weight:680">AI Pitch Sheet</div><div class="sub">Every pitchable source across all prompts, with DR, traffic and the outreach pipeline</div></div>
+      <span class="btn" style="pointer-events:none">Open sheet ${extIcon()}</span></a>`;
+  return sheetBtn + (c.status==='pitch'?pitchSummaryCard(c,s):'') + tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
       <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Best result per model, over the selected window</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
       <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
