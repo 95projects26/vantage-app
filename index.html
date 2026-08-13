@@ -804,7 +804,8 @@ function renderClient(){
     <div class="spacer"></div>
     ${filterControls(c.id)}
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
-    ${isClient()?'':`<button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    ${isClient()?'':`<button class="btn" onclick="addClientUserModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="width:16px;height:16px"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M18 8v6M15 11h6"/></svg>Add client user</button>
+    <button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`}`;
   const tabbar = `<div class="tabs">`+
     dropTabsForClient(['overview','Overview','prompts','Prompts','explorer','Prompt Explorer','answers','Answers','actions','Actions','competitors','Competitor Analysis','perception','AI Perception','sources','Cited sources'], 2)
@@ -1219,6 +1220,34 @@ window.savePrompt=async function(cid){
   const { error } = await sb.from('prompts').insert({client_id:cid,text,kind:kindFor(aliases,text)});
   if(error){ $('p_save').disabled=false; toast('Error: '+error.message); return; }
   closeModal(); toast('Prompt added, running it now'); await loadAll(); render(); startRun(cid);
+};
+window.addClientUserModal=async function(cid){
+  const c=state.clients.find(x=>x.id===cid);
+  const { data:users } = await sb.from('client_access').select('email').eq('client_id',cid).order('email');
+  const list=(users&&users.length)?users.map(u=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1">${esc(u.email)}</span>
+      <button class="btn ghost sm" onclick="removeClientUser('${esc(u.email)}','${cid}')">Remove</button></div>`).join('')
+    : '<div class="sub" style="padding:8px 0">No client users yet.</div>';
+  openModal(`<h2>Client users · ${esc(c?c.name:'')}</h2>
+    <div class="msub">They log in with this email and see ONLY ${esc(c?c.name:'this client')}, read-only: prompts, results, competitors, sources, perception. No pricing, no editing, no other clients.</div>
+    <div class="fld"><label>Add an email</label>
+      <div style="display:flex;gap:8px"><input id="cu_email" placeholder="name@company.com" style="flex:1;padding:9px 11px;border-radius:9px;border:1px solid var(--border);background:var(--panel-2);color:var(--text)" onkeydown="if(event.key==='Enter')saveClientUser('${cid}')">
+      <button class="btn" id="cu_add" onclick="saveClientUser('${cid}')">Add</button></div></div>
+    <div style="margin-top:6px">${list}</div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Done</button></div>`);
+};
+window.saveClientUser=async function(cid){
+  const email=($('cu_email').value||'').trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Enter a valid email'); return; }
+  $('cu_add').disabled=true;
+  const { error } = await sb.from('client_access').upsert({email,client_id:cid},{onConflict:'email'});
+  if(error){ $('cu_add').disabled=false; toast('Error: '+error.message); return; }
+  toast('Client user added'); addClientUserModal(cid);
+};
+window.removeClientUser=async function(email,cid){
+  const { error } = await sb.from('client_access').delete().eq('email',email);
+  if(error){ toast('Error: '+error.message); return; }
+  toast('Removed'); addClientUserModal(cid);
 };
 function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 const FREQ_OPTS=[['off','Off'],['daily','Daily'],['every_other_day','Every other day'],['twice_weekly','Twice a week'],['weekly','Weekly'],['monthly','Monthly']];
