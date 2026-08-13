@@ -596,7 +596,7 @@ function renderNav(){
   } else {
     const c=state.clients.find(x=>x.id===state.clientId);
     nav.innerHTML = '<div class="navlbl">'+esc(c?c.name:'')+'</div>'+
-      ['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'explorer','Prompt Explorer',compassIcon(),'answers','Answers',chatIcon(),'actions','Actions',boltIcon(),'competitors','Competitor Analysis',peopleIcon(),'perception','AI Perception',eyeIcon2(),'sources','Cited sources',linkIcon()]
+      dropTabsForClient(['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'explorer','Prompt Explorer',compassIcon(),'answers','Answers',chatIcon(),'actions','Actions',boltIcon(),'competitors','Competitor Analysis',peopleIcon(),'perception','AI Perception',eyeIcon2(),'sources','Cited sources',linkIcon()], 3)
       .reduce((acc,_,i,a)=> i%3===0? acc+navTab(a[i],a[i+1],a[i+2]) : acc, '') +
       (isClient()?'':'<div class="navsec" style="padding:0"><button class="navitem" onclick="go(\'clients\')" style="margin-top:8px">'+backIcon()+'All clients</button></div>');
   }
@@ -797,6 +797,7 @@ function renderOps(){
 // ---------- RENDER: client detail ----------
 function renderClient(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
+  if(isClient() && CLIENT_HIDE_TABS.includes(state.tab)) state.tab='overview';
   const titles={overview:'Overview',prompts:'Prompts',explorer:'Prompt Explorer',answers:'All answers',actions:'Actions',competitors:'Competitor Analysis',perception:'AI Perception',sources:'Cited sources'};
   const crumb = isClient() ? `<b>${esc(c.name)}</b>` : `<a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b>`;
   $('topbar').innerHTML = `<div><div class="crumb">${crumb}</div><div class="h1">${titles[state.tab]}</div></div>
@@ -806,7 +807,7 @@ function renderClient(){
     ${isClient()?'':`<button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`}`;
   const tabbar = `<div class="tabs">`+
-    ['overview','Overview','prompts','Prompts','explorer','Prompt Explorer','answers','Answers','actions','Actions','competitors','Competitor Analysis','perception','AI Perception','sources','Cited sources']
+    dropTabsForClient(['overview','Overview','prompts','Prompts','explorer','Prompt Explorer','answers','Answers','actions','Actions','competitors','Competitor Analysis','perception','AI Perception','sources','Cited sources'], 2)
     .reduce((a,_,i,arr)=> i%2===0? a+`<button class="tab ${state.tab===arr[i]?'on':''}" onclick="setTab('${arr[i]}')">${arr[i+1]}</button>`:a,'')+`</div>`;
   let body='';
   if(state.tab==='overview') body=overviewHTML(c);
@@ -1646,6 +1647,10 @@ async function boot(){
   render();
 }
 const isClient = () => state.role==='client';
+// Tabs clients never see (internal, not viewer-facing). They VIEW; they don't act.
+const CLIENT_HIDE_TABS = ['actions','explorer'];
+function dropTabsForClient(arr, n){ if(!isClient()) return arr;
+  const out=[]; for(let i=0;i<arr.length;i+=n){ if(!CLIENT_HIDE_TABS.includes(arr[i])) out.push(...arr.slice(i,i+n)); } return out; }
 function showNoAccess(email){
   $('nav').innerHTML=''; $('topbar').innerHTML='';
   $('content').innerHTML=`<div class="note" style="max-width:540px;margin:48px auto">${infoIcon()} This account (${esc(email)}) doesn't have access yet. Ask your 95 Projects contact to enable it, or <a onclick="signOut()" style="color:var(--accent);cursor:pointer;font-weight:600">use a different email</a>.</div>`;
