@@ -376,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -978,12 +978,34 @@ function srcLine(s){return `<div class="srcline">${favChip(s.d)}<span class="dom
   <div class="bar" style="flex:1;max-width:150px"><i style="width:${s.p}%"></i></div><span class="pct tnum">${s.p}%</span></div>`;}
 function emptyClient(){return `<div class="note" style="max-width:560px">${infoIcon()}No results yet. This client will get data after the next daily run (6am ET), or its prompts were just added. Add prompts in the Prompts tab.</div>`;}
 
+// ---- Prompt tags ----
+const TAG_PALETTE=['#4E5FE0','#17A79A','#B7842A','#C2557A','#7A5AF8','#2E8B57','#D2691E'];
+function tagColor(t){ const i=PROMPT_TAGS.indexOf(t); if(i>=0) return TAG_PALETTE[i%TAG_PALETTE.length];
+  let h=0; const s=(t||'').toLowerCase(); for(let k=0;k<s.length;k++) h=(h*31+s.charCodeAt(k))>>>0; return TAG_PALETTE[h%TAG_PALETTE.length]; }
+function tagChip(t){ const c=tagColor(t); return `<span style="display:inline-block;font-size:11px;font-weight:600;line-height:1;padding:3px 7px;border-radius:20px;color:${c};background:color-mix(in srgb,${c} 14%,transparent);border:1px solid color-mix(in srgb,${c} 32%,transparent)">${esc(t)}</span>`; }
+function clientTags(cid){ const s=new Set(); clientPrompts(cid).forEach(p=>(p.tags||[]).forEach(t=>s.add(t))); return [...s].sort((a,b)=>a.localeCompare(b)); }
+function tagChipsUnder(p, cl){ const tags=p.tags||[];
+  if(cl && !tags.length) return '';
+  const chips=tags.map(tagChip).join(' ');
+  const edit=cl?'':`<button class="rowbtn" title="Edit tags" style="padding:2px 7px;font-size:11px;color:var(--faint)" onclick="event.stopPropagation();editPromptTags('${p.id}')">${tags.length?'edit':'+ tag'}</button>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px">${chips}${edit}</div>`; }
+function tagFilterBar(c){ const used=clientTags(c.id); if(!used.length) return '';
+  const hasUntagged=clientPrompts(c.id).some(p=>!(p.tags||[]).length);
+  const mk=(val,label)=>{ const on=state.tagFilter===val;
+    return `<button class="btn ghost sm" style="${on?'border-color:var(--accent);color:var(--accent);font-weight:600':''}" onclick="setTagFilter('${val.replace(/'/g,"\\'")}')">${label}</button>`; };
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px">
+    <span class="eyebrow" style="margin-right:2px">Filter by tag</span>
+    ${mk('all','All')}${used.map(t=>mk(t,esc(t))).join('')}${hasUntagged?mk('__untagged__','Untagged'):''}</div>`; }
 function promptsHTML(c){
   const ps=clientPrompts(c.id);
   const rows=latestRows(c.id);
   const byPrompt=groupBy(rows,'prompt_text');
   const groups={branded:[],unbranded:[]};
   ps.forEach(p=>groups[p.kind==='branded'?'branded':'unbranded'].push(p));
+  if(state.tagFilter && state.tagFilter!=='all'){
+    const f = state.tagFilter==='__untagged__' ? (p=>!(p.tags||[]).length) : (p=>(p.tags||[]).includes(state.tagFilter));
+    groups.branded=groups.branded.filter(f); groups.unbranded=groups.unbranded.filter(f); }
+  const shownCount=groups.branded.length+groups.unbranded.length;
   const cl=isClient();
   const freqSel=p=>`<select class="freqsel" onclick="event.stopPropagation()" onchange="event.stopPropagation();setPromptFreq('${p.id}',this.value)">`+
     FREQ_OPTS.map(([v,l])=>`<option value="${v}"${(p.frequency||'weekly')===v?' selected':''}>${l}</option>`).join('')+`</select>`;
@@ -997,7 +1019,7 @@ function promptsHTML(c){
         <td style="width:38px;text-align:right"><button class="rowbtn" title="Delete prompt" onclick="event.stopPropagation();deletePrompt('${p.id}')">${trashIcon()}</button></td>`;
       return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(p.text)}')">
         ${cl?'':teamCells}
-        <td style="max-width:340px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span></td>
+        <td style="max-width:340px;font-weight:550">${esc(p.text)} <span class="viewcue">read${chev()}</span>${tagChipsUnder(p,cl)}</td>
         <td class="tnum">${vis==null?'—':vis+'%'}</td>${cl?'':teamTail}</tr>`;
     }).join('');
     return `<div class="promptgroup">${title}</div><table><thead><tr>
@@ -1008,11 +1030,13 @@ function promptsHTML(c){
   const bulkBtns=FREQ_OPTS.map(([v,l])=>`<button class="btn ghost sm" onclick="bulkSetFreq('${v}')">${l}</button>`).join('');
   const tbl=`<div id="bulkbar" class="bulkbar" style="display:${sel.size?'flex':'none'}">
       <b id="bulkcount">${sel.size} selected</b><span style="color:var(--faint);font-size:12px">Set cadence:</span>${bulkBtns}
+      <span style="width:1px;height:18px;background:var(--border)"></span><button class="btn ghost sm" onclick="bulkAddTag()">+ Tag…</button>
       <div class="spacer"></div><button class="btn ghost sm" onclick="clearPromptSel()">Clear</button></div>`;
   return `<div style="display:flex;align-items:center;margin-bottom:10px"><div class="eyebrow">${ps.length} prompts · ${enM.length} models${cl?'':` · <b style="color:var(--text)">~$${total.toFixed(2)}/mo</b> estimated at these cadences`}</div><div class="spacer"></div>
     ${cl?'':`<button class="btn" onclick="addPromptModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button>`}</div>
     ${cl?'':tbl}
-    <div class="card"><div class="bd" style="padding-top:6px">${ps.length?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts yet.</div>'}</div></div>
+    ${tagFilterBar(c)}
+    <div class="card"><div class="bd" style="padding-top:6px">${!ps.length?'<div class="note">No prompts yet.</div>':(shownCount?(grp('Unbranded · buyer intent',groups.unbranded)+grp('Branded · reputation',groups.branded)):'<div class="note">No prompts with this tag. <a onclick="setTagFilter(\'all\')">Show all</a></div>')}</div></div>
     ${cl?'':`<div class="note" style="margin-top:12px"><b>Cadence</b> sets how often each prompt runs. Daily = defend your winners; weekly/monthly = track the long tail cheaply. Tick prompts to change several at once.</div>
     <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">
       <div><div style="font-weight:600;font-size:13px">Danger zone</div><div style="font-size:12px;color:var(--faint)">Deleting a client removes all of its prompts and history permanently.</div></div>
@@ -1281,6 +1305,7 @@ window.removeClientUser=async function(email,cid){
 };
 function splitCsv(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean);}
 const FREQ_OPTS=[['off','Off'],['daily','Daily'],['every_other_day','Every other day'],['twice_weekly','Twice a week'],['weekly','Weekly'],['monthly','Monthly']];
+const PROMPT_TAGS=['Brand','Comparison','Alternatives','Use case','Commercial','Informational','Local'];
 window.clientSettingsModal=function(cid){
   const c=state.clients.find(x=>x.id===cid); if(!c) return;
   const mf=c.model_freq||{};
@@ -1350,6 +1375,47 @@ window.bulkSetFreq=async function(freq){
   state.selPrompts.clear();
   toast(`Set ${ids.length} prompt${ids.length>1?'s':''} to ${freq.replace(/_/g,' ')}`);
   render();
+};
+// --- Prompt tags ---
+window.setTagFilter=function(t){ state.tagFilter=t; render(); };
+window.editPromptTags=function(pid){
+  const p=(state.prompts||[]).find(x=>x.id===pid); if(!p) return;
+  const cur=new Set(p.tags||[]);
+  const custom=(p.tags||[]).filter(t=>!PROMPT_TAGS.includes(t));
+  const presetHTML=PROMPT_TAGS.map(t=>{ const c=tagColor(t);
+    return `<label style="display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border:1px solid ${cur.has(t)?c:'var(--border)'};border-radius:9px;cursor:pointer;font-size:13px">
+      <input type="checkbox" data-tag="${esc(t)}" ${cur.has(t)?'checked':''}> <span style="color:${c};font-weight:600">${esc(t)}</span></label>`; }).join('');
+  openModal(`<h2>Tags</h2><div class="msub">${esc(p.text)}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0">${presetHTML}</div>
+    <div class="fld"><label>Custom tags (comma-separated)</label><input id="tag_custom" value="${esc(custom.join(', '))}" placeholder="e.g. seasonal, high-intent"></div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="savePromptTags('${pid}')">Save tags</button></div>`);
+};
+window.savePromptTags=async function(pid){
+  const checked=[...document.querySelectorAll('#modal-card input[type=checkbox][data-tag]')].filter(c=>c.checked).map(c=>c.dataset.tag);
+  const custom=(($('tag_custom')||{}).value||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const seen=new Set(); const tags=[...checked,...custom].filter(t=>{const k=t.toLowerCase(); if(seen.has(k))return false; seen.add(k); return true;});
+  const p=(state.prompts||[]).find(x=>x.id===pid); if(p) p.tags=tags; // optimistic
+  const { error } = await sb.from('prompts').update({ tags }).eq('id', pid);
+  if(error){ toast('Error: '+error.message); await loadAndRender(); return; }
+  closeModal(); toast('Tags saved'); render();
+};
+window.bulkAddTag=function(){
+  const ids=[...state.selPrompts]; if(!ids.length){toast('Select prompts first');return;}
+  const opts=PROMPT_TAGS.map(t=>{ const c=tagColor(t);
+    return `<button class="btn ghost sm" style="color:${c};border-color:color-mix(in srgb,${c} 40%,transparent)" onclick="applyBulkTag('${t}')">${esc(t)}</button>`; }).join('');
+  openModal(`<h2>Add tag to ${ids.length} prompt${ids.length>1?'s':''}</h2><div class="msub">Adds the tag to every selected prompt. Existing tags are kept.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0">${opts}</div>
+    <div class="fld"><label>Or a custom tag</label><input id="bulk_tag" placeholder="type a tag"></div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="applyBulkTag()">Save</button></div>`);
+};
+window.applyBulkTag=async function(tag){
+  const t=(tag||(($('bulk_tag')||{}).value)||'').trim(); if(!t){toast('Pick or type a tag');return;}
+  const ids=[...state.selPrompts]; if(!ids.length) return;
+  const touched=[];
+  for(const p of state.prompts){ if(state.selPrompts.has(p.id)){
+    const set=new Set(p.tags||[]); if(!set.has(t)){ p.tags=[...set,t]; touched.push(p); } } }
+  for(const p of touched){ const { error }=await sb.from('prompts').update({tags:p.tags}).eq('id',p.id); if(error){ toast('Error: '+error.message); await loadAndRender(); return; } }
+  state.selPrompts.clear(); closeModal(); toast(`Tagged ${ids.length} prompt${ids.length>1?'s':''} · ${t}`); render();
 };
 window.deleteClient=async function(id){
   const c=state.clients.find(x=>x.id===id); const nm=c?c.name:'this client';
