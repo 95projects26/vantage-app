@@ -525,6 +525,25 @@ async function loadAll(){
 const clientResults = cid => state.results.filter(r=>r.client_id===cid);
 const clientPrompts = cid => state.prompts.filter(p=>p.client_id===cid);
 const clientActions = cid => (state.actions||[]).filter(a=>a.client_id===cid);
+// ---- CSV export (opens in Google Sheets via File > Import) ----
+function csvCell(v){ if(v==null)return ''; if(Array.isArray(v))v=v.join(' | '); v=String(v).replace(/\r?\n/g,' '); return /[",]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function downloadCSV(filename, headers, rows){
+  const body=[headers.map(csvCell).join(',')].concat(rows.map(r=>r.map(csvCell).join(','))).join('\r\n');
+  const blob=new Blob(['﻿'+body],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+window.exportClient=function(cid){
+  const c=state.clients.find(x=>x.id===cid); if(!c)return;
+  const rs=viewResults(cid).slice().sort((a,b)=> (b.run_date||'').localeCompare(a.run_date||'') || (a.prompt_text||'').localeCompare(b.prompt_text||''));
+  if(!rs.length){toast('No data to export yet');return;}
+  const headers=['Date','Model','Prompt','Mentioned','Rank','Prominence','Sentiment','Competitors mentioned','Other brands','Cited domains','Cited URLs','Answer'];
+  const rows=rs.map(r=>[r.run_date,r.model,r.prompt_text,(r.client_mentioned?'Yes':'No'),r.client_rank,r.client_prominence,r.sentiment,(r.competitors_mentioned||[]),(r.other_brands||[]),(r.cited_domains||[]),(r.cited_urls||[]),(r.answer||'')]);
+  const slug=(c.name||'client').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const scope=state.modelFilter==='all'?'':'-'+state.modelFilter;
+  downloadCSV(`${slug}${scope}-results.csv`, headers, rows);
+  toast(`Exported ${rows.length} rows`);
+};
 // results after applying the active model filter (used by all detail views)
 function viewResults(cid){ const rs=clientResults(cid);
   return state.modelFilter==='all'? rs : rs.filter(r=>r.model===state.modelFilter); }
@@ -805,6 +824,7 @@ function renderClient(){
     <div class="spacer"></div>
     ${filterControls(c.id)}
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>
+    <button class="btn ghost" title="Download this client's results as CSV (opens in Google Sheets)" onclick="exportClient('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="width:16px;height:16px"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>Export CSV</button>
     ${isClient()?'':`<button class="btn" onclick="addClientUserModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="width:16px;height:16px"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M18 8v6M15 11h6"/></svg>Add client user</button>
     <button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`}`;
@@ -1214,17 +1234,22 @@ window.saveClient=async function(){
   if(prompts.length) startRun(cl.id);   // run its prompts right away
 };
 window.addPromptModal=function(cid){
-  openModal(`<h2>Add prompt</h2><div class="msub">A search to track for this client.</div>
-    <div class="fld"><label>Prompt text</label><textarea id="p_text" rows="2" placeholder="best seo agency for saas"></textarea></div>
-    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="p_save" onclick="savePrompt('${cid}')">Add prompt</button></div>`);
+  openModal(`<h2>Add prompts</h2><div class="msub">One search per line. Add as many as you want.</div>
+    <div class="fld"><label>Prompts (one per line)</label><textarea id="p_text" rows="7" placeholder="best seo agency for saas&#10;best ppc agency for fintech&#10;top ai search agencies"></textarea></div>
+    <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="p_save" onclick="savePrompt('${cid}')">Add prompts</button></div>`);
 };
 window.savePrompt=async function(cid){
-  const text=$('p_text').value.trim(); if(!text){toast('Enter a prompt');return;}
+  const raw=($('p_text').value||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  const seen=new Set(); let lines=raw.filter(t=>{const k=t.toLowerCase(); if(seen.has(k))return false; seen.add(k); return true;});
+  const existing=new Set(clientPrompts(cid).map(p=>(p.text||'').toLowerCase()));
+  const dupes=lines.filter(t=>existing.has(t.toLowerCase())); lines=lines.filter(t=>!existing.has(t.toLowerCase()));
+  if(!lines.length){toast(dupes.length?'Those prompts are already tracked':'Enter at least one prompt');return;}
   const c=state.clients.find(x=>x.id===cid); const aliases=(c&&c.aliases)||[];
   $('p_save').disabled=true;
-  const { error } = await sb.from('prompts').insert({client_id:cid,text,kind:kindFor(aliases,text)});
+  const rows=lines.map(text=>({client_id:cid,text,kind:kindFor(aliases,text)}));
+  const { error } = await sb.from('prompts').insert(rows);
   if(error){ $('p_save').disabled=false; toast('Error: '+error.message); return; }
-  closeModal(); toast('Prompt added, running it now'); await loadAll(); render(); startRun(cid);
+  closeModal(); toast(lines.length+' prompt'+(lines.length>1?'s':'')+' added'+(dupes.length?', '+dupes.length+' already tracked':'')+', running now'); await loadAll(); render(); startRun(cid);
 };
 window.addClientUserModal=async function(cid){
   const c=state.clients.find(x=>x.id===cid);
