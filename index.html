@@ -672,14 +672,15 @@ function renderClients(){
     $('content').innerHTML = `<div class="note" style="max-width:520px">${infoIcon()}No clients yet. Click "Add client" to start tracking one. The daily run picks it up automatically.</div>`;
     return;
   }
-  const isPitch=c=>c.status==='pitch';
-  const counts={all:state.clients.length, client:state.clients.filter(c=>!isPitch(c)).length, pitch:state.clients.filter(isPitch).length};
-  const seg=`<div class="seg" style="margin-bottom:16px">${[['all','All'],['client','Clients'],['pitch','Pitch']].map(([v,l])=>
+  const isPitch=c=>c.status==='pitch', isArch=c=>c.status==='archived';
+  const counts={all:state.clients.filter(c=>!isArch(c)).length, client:state.clients.filter(c=>c.status==='client').length, pitch:state.clients.filter(isPitch).length, archived:state.clients.filter(isArch).length};
+  const seg=`<div class="seg" style="margin-bottom:16px">${[['all','All'],['client','Clients'],['pitch','Pitch'],['archived','Archive']].map(([v,l])=>
     `<button class="${state.clientFilter===v?'on':''}" onclick="setClientFilter('${v}')">${l} <span style="opacity:.55;font-variant-numeric:tabular-nums">${counts[v]}</span></button>`).join('')}</div>`;
-  const shown=state.clients.filter(c=> state.clientFilter==='all' ? true : state.clientFilter==='pitch' ? isPitch(c) : !isPitch(c));
+  const shown=state.clients.filter(c=>{ const f=state.clientFilter;
+    return f==='all'? !isArch(c) : f==='archived'? isArch(c) : f==='pitch'? isPitch(c) : c.status==='client'; });
   const cards = shown.map(c=>{
     const s=summary(c.id); const cost=clientLatestCost(c.id);
-    const tagc = isPitch(c)?'var(--faint)':'var(--pos)';
+    const tagc = isArch(c)?'var(--neu)':isPitch(c)?'var(--faint)':'var(--pos)';
     return `<button class="ccard" onclick="openClient('${c.id}')">
       <div class="row1">${clientAvatar(c)}
         <div><div class="nm">${esc(c.name)}</div><span class="tag" style="color:${tagc};background:color-mix(in srgb,${tagc} 14%,transparent)">${esc(c.status)}</span></div></div>
@@ -690,7 +691,8 @@ function renderClients(){
         <div class="stat"><div class="k">Cost/run</div><div class="v tnum">${cost!=null?'$'+cost.toFixed(2):'—'}</div></div>
       </div></button>`;
   }).join('');
-  const grid = shown.length? `<div class="clientgrid">${cards}</div>` : `<div class="note">No ${state.clientFilter==='pitch'?'pitch accounts':'clients'} yet.</div>`;
+  const emptyLbl={all:'accounts',client:'clients',pitch:'pitch accounts',archived:'archived accounts'}[state.clientFilter]||'accounts';
+  const grid = shown.length? `<div class="clientgrid">${cards}</div>` : `<div class="note">No ${emptyLbl} yet.</div>`;
   $('content').innerHTML = costBar() + seg + grid;
 }
 window.setClientFilter=function(v){ state.clientFilter=v; render(); };
@@ -1354,12 +1356,23 @@ window.clientSettingsModal=function(cid){
       <span class="modelbadge" style="flex:1;min-width:0"><span class="m" style="background:${MB(m).c}">${MB(m).i}</span>${MB(m).n}</span>
       <select class="fsel" data-model="${m}" style="width:158px">${FREQ_OPTS.map(([v,l])=>`<option value="${v}"${cur===v?' selected':''}>${l}</option>`).join('')}</select>
     </div>`;}).join('');
-  const acctBlock = c.status==='pitch'
-    ? `<div class="fld" style="background:var(--neu-weak);border:1px solid var(--border);border-radius:11px;padding:13px 14px">
+  const boxCss='background:var(--neu-weak);border:1px solid var(--border);border-radius:11px;padding:13px 14px';
+  const archBtn=`<button class="btn ghost" onclick="archiveClient('${cid}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="width:15px;height:15px"><path d="M3 7h18M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 11h6"/></svg>Archive</button>`;
+  const acctBlock = c.status==='archived'
+    ? `<div class="fld" style="${boxCss}">
+         <label style="color:var(--text)">Archived · paused</label>
+         <div class="hint">Not running on any schedule. All history is kept. Restore it to bring it back, or hit Run now to take a fresh snapshot. Restoring kicks off one full run so you can see what changed.</div>
+         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+           <button class="btn" onclick="restoreClient('${cid}','client')">Restore as client</button>
+           <button class="btn ghost" onclick="restoreClient('${cid}','pitch')">Restore as pitch</button></div></div>`
+    : c.status==='pitch'
+    ? `<div class="fld" style="${boxCss}">
          <label style="color:var(--text)">Pitch account</label>
-         <div class="hint">A snapshot to show a prospect what they show up for. Runs twice, when you add prompts and once the next day, then only when you hit Run now. Per-model frequency is ignored for pitches.</div>
-         <button class="btn" style="margin-top:9px" onclick="convertToClient('${cid}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M20 6L9 17l-5-5"/></svg>Convert to client account</button></div>`
-    : `<div class="fld"><label>Client account</label><div class="hint">Each model runs on its own cadence below.</div></div>`;
+         <div class="hint">A snapshot to show a prospect what they surface for. Runs one full pass across all models when you add it, add prompts, or hit Run now, and never on a schedule, so it stays put until you convert, re-run, or archive it. Per-model frequency is ignored.</div>
+         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+           <button class="btn" onclick="convertToClient('${cid}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M20 6L9 17l-5-5"/></svg>Convert to client account</button>${archBtn}</div></div>`
+    : `<div class="fld"><label>Client account</label><div class="hint">Each model runs on its own cadence below.</div>
+         <div style="margin-top:9px">${archBtn}</div></div>`;
   openModal(`<h2>${esc(c.name)} — settings</h2><div class="msub">Set how often each model runs. Fewer / less-frequent models = less credit spend.</div>
     ${acctBlock}
     <div class="fld"><label>Models & frequency</label><div class="hint">Pick a cadence per model, or Off to disable it. "Twice a week" ≈ every 3 days. A manual "Run now" always refreshes every enabled model regardless.</div>
@@ -1382,6 +1395,20 @@ window.convertToClient=async function(cid){
   const {error}=await sb.from('clients').update({status:'client'}).eq('id',cid);
   if(error){ toast('Error: '+error.message); return; }
   closeModal(); toast('Converted to client — now on the daily schedule'); await loadAll(); render();
+};
+window.archiveClient=async function(cid){
+  const c=state.clients.find(x=>x.id===cid); const nm=c?c.name:'this account';
+  if(!confirm('Archive "'+nm+'"? It stops running on any schedule but keeps all of its history. You can restore or re-run it anytime.')) return;
+  const {error}=await sb.from('clients').update({status:'archived'}).eq('id',cid);
+  if(error){ toast('Error: '+error.message); return; }
+  closeModal(); toast(nm+' archived — no longer running'); await loadAll(); render();
+};
+window.restoreClient=async function(cid, status){
+  const {error}=await sb.from('clients').update({status}).eq('id',cid);
+  if(error){ toast('Error: '+error.message); return; }
+  closeModal();
+  toast('Restored as '+status+' — running a fresh pass now');
+  await loadAll(); render(); startRun(cid);   // one full run so they can see what changed
 };
 window.deletePrompt=async function(id){
   if(!confirm('Delete this prompt? It stops being tracked from the next run on. Past results stay in history.')) return;
