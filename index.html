@@ -424,7 +424,7 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function initials(n){return (n||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||n.slice(0,2).toUpperCase();}
 function colorFor(s){let h=0;for(const c of (s||'')){h=(h*31+c.charCodeAt(0))>>>0;}return PALETTE[h%PALETTE.length];}
 const MB = m => m==='openai'?{n:'ChatGPT',c:'#10A37F',i:'G'}:m==='anthropic'?{n:'Claude',c:'#D97757',i:'C'}:m==='perplexity'?{n:'Perplexity',c:'#20808D',i:'P'}:m==='gemini'?{n:'Gemini',c:'#4285F4',i:'G'}:m==='aio'?{n:'Google AI Overviews',c:'#4285F4',i:'A'}:{n:m,c:'#6E7A93',i:'?'};
-const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:['off','No mention'];
+const SENTCHIP = s => s==='positive'?['pos','Positive']:s==='neutral'?['neu','Neutral']:s==='negative'?['neg','Negative']:s==='mixed'?['neu','Mixed']:['off','No mention'];
 // Group rows into { key -> [rows] } by a field name.
 function groupBy(rows, key){ const m={}; rows.forEach(r=>{ (m[r[key]]=m[r[key]]||[]).push(r); }); return m; }
 // 'branded' if the prompt names one of the brand aliases, else 'unbranded'.
@@ -562,13 +562,18 @@ function promptKind(cid, text){
   const p=clientPrompts(cid).find(x=>x.text===text);
   return p?p.kind:'unbranded';
 }
+// Percentage/majority-based label: the dominant sentiment wins; "Mixed" only when
+// pos and neg are genuinely close (neither clears a 60% majority of all mentions).
 function sentLabelOf(sc){
   const t=sc.positive+sc.neutral+sc.negative;
   if(!t) return 'No data';
-  if(sc.positive&&sc.negative) return 'Mixed';
-  if(sc.positive>=sc.negative && sc.positive>=sc.neutral) return 'Positive';
+  const pos=sc.positive/t, neg=sc.negative/t;
+  if(pos>=0.6 && sc.positive>=sc.negative) return 'Positive';
+  if(neg>=0.6 && sc.negative>=sc.positive) return 'Negative';
+  if(sc.positive && sc.negative) return 'Mixed';
+  if(sc.positive>sc.negative) return 'Positive';
   if(sc.negative>sc.positive) return 'Negative';
-  return 'Mixed';
+  return 'Neutral';
 }
 function summary(cid){
   const W=state.windowDays;
@@ -848,10 +853,9 @@ function overviewHTML(c){
   const rows=latestRows(c.id);
   if(!rows.length) return emptyClient();
   const s=summary(c.id);
-  const dLbl=`${s.dayCount} day${s.dayCount>1?'s':''}`;
   const visSub = s.prevVis!=null
     ? `${s.unbMent} of ${s.unbTotal} buyer-intent answers · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
-    : `${s.unbMent} of ${s.unbTotal} buyer-intent answers over ${dLbl}`;
+    : `${s.unbMent} of ${s.unbTotal} buyer-intent answers · ${winText()}`;
   const sovSub = s.rank ? `of ${s.totalBrands} brands named`
     : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data');
   const uTot=s.usc.positive+s.usc.neutral+s.usc.negative;
@@ -958,16 +962,25 @@ function promptPerfTable(c){
       const label=feat?'Featured':(ment?'Listed':'Absent');
       return `<td><span class="chip ${ment?'pos':'off'}">${label}</span></td>`; }).join('');
     const mented=Object.values(pm).flat().filter(r=>r.client_mentioned);
-    const sc=SENTCHIP(mented.length?bestSentiment(mented):null);
+    const sc=SENTCHIP(mented.length?promptSentiment(mented):null);
     return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(t)}')"><td style="max-width:320px;font-weight:550">${esc(t)} <span class="viewcue">read${chev()}</span></td>
       <td><span class="chip ${kind==='branded'?'neu':'off'}">${kind}</span></td>${cells}<td><span class="chip ${sc[0]}">${sc[1]}</span></td></tr>`;
   }).join('');
   return `<table>${head}<tbody>${body}</tbody></table>`;
 }
-function bestSentiment(modelMap){
-  const order={negative:0,neutral:1,positive:2}; let best=null;
-  for(const r of Object.values(modelMap)){ if(r.sentiment&&(best===null||order[r.sentiment]<order[best])) best=r.sentiment; }
-  return best;
+// Sentiment for a prompt across all its mentions in the window, by share of mentions
+// (not worst-case): the dominant sentiment wins, "mixed" only for a genuine split.
+function promptSentiment(rows){
+  const sc={positive:0,neutral:0,negative:0};
+  rows.forEach(r=>{ if(sc[r.sentiment]!=null) sc[r.sentiment]++; });
+  const t=sc.positive+sc.neutral+sc.negative; if(!t) return null;
+  const pos=sc.positive/t, neg=sc.negative/t;
+  if(pos>=0.6 && sc.positive>=sc.negative) return 'positive';
+  if(neg>=0.6 && sc.negative>=sc.positive) return 'negative';
+  if(sc.positive && sc.negative) return 'mixed';
+  if(sc.positive>sc.negative) return 'positive';
+  if(sc.negative>sc.positive) return 'negative';
+  return 'neutral';
 }
 function aggSources(rows){
   const cnt={}; let n=0;
