@@ -376,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -672,9 +672,14 @@ function renderClients(){
     $('content').innerHTML = `<div class="note" style="max-width:520px">${infoIcon()}No clients yet. Click "Add client" to start tracking one. The daily run picks it up automatically.</div>`;
     return;
   }
-  const cards = state.clients.map(c=>{
+  const isPitch=c=>c.status==='pitch';
+  const counts={all:state.clients.length, client:state.clients.filter(c=>!isPitch(c)).length, pitch:state.clients.filter(isPitch).length};
+  const seg=`<div class="seg" style="margin-bottom:16px">${[['all','All'],['client','Clients'],['pitch','Pitch']].map(([v,l])=>
+    `<button class="${state.clientFilter===v?'on':''}" onclick="setClientFilter('${v}')">${l} <span style="opacity:.55;font-variant-numeric:tabular-nums">${counts[v]}</span></button>`).join('')}</div>`;
+  const shown=state.clients.filter(c=> state.clientFilter==='all' ? true : state.clientFilter==='pitch' ? isPitch(c) : !isPitch(c));
+  const cards = shown.map(c=>{
     const s=summary(c.id); const cost=clientLatestCost(c.id);
-    const tagc = c.status==='pitch'?'var(--faint)':'var(--pos)';
+    const tagc = isPitch(c)?'var(--faint)':'var(--pos)';
     return `<button class="ccard" onclick="openClient('${c.id}')">
       <div class="row1">${clientAvatar(c)}
         <div><div class="nm">${esc(c.name)}</div><span class="tag" style="color:${tagc};background:color-mix(in srgb,${tagc} 14%,transparent)">${esc(c.status)}</span></div></div>
@@ -685,8 +690,10 @@ function renderClients(){
         <div class="stat"><div class="k">Cost/run</div><div class="v tnum">${cost!=null?'$'+cost.toFixed(2):'—'}</div></div>
       </div></button>`;
   }).join('');
-  $('content').innerHTML = costBar() + `<div class="clientgrid">${cards}</div>`;
+  const grid = shown.length? `<div class="clientgrid">${cards}</div>` : `<div class="note">No ${state.clientFilter==='pitch'?'pitch accounts':'clients'} yet.</div>`;
+  $('content').innerHTML = costBar() + seg + grid;
 }
+window.setClientFilter=function(v){ state.clientFilter=v; render(); };
 // Compact estimated-cost strip on the Clients page.
 function costBar(){
   if(!state.results.length) return '';
