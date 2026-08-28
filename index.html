@@ -502,11 +502,29 @@ window.sendLink = async function(){
 window.signOut = async function(){ await sb.auth.signOut(); location.reload(); };
 
 // ---------- DATA ----------
+// Results load, paginated. PostgREST caps a single response at 1000 rows, so a plain
+// select only ever returned the newest ~1000 (a handful of days) even though the DB holds
+// months of history. We page through the FULL history without the heavy `answer` column
+// (needed only for reading answer text), then hydrate `answer` for just the recent slice.
+async function loadResults(){
+  const COLS='id,client_id,run_date,model,prompt_text,client_mentioned,client_rank,client_prominence,sentiment,competitors_mentioned,other_brands,cited_domains,cited_urls';
+  const PAGE=1000; let all=[];
+  for(let from=0; from<200000; from+=PAGE){
+    const { data, error } = await sb.from('results').select(COLS).order('run_date',{ascending:false}).range(from, from+PAGE-1);
+    if(error){ toast('Load error: '+error.message); break; }
+    all=all.concat(data||[]);
+    if(!data || data.length<PAGE) break;
+  }
+  // hydrate full answer text for the most recent rows (the ones users actually read)
+  const { data:ans } = await sb.from('results').select('id,answer').order('run_date',{ascending:false}).range(0,1499);
+  if(ans && ans.length){ const amap={}; ans.forEach(x=>{ amap[x.id]=x.answer; }); all.forEach(r=>{ if(amap[r.id]!=null) r.answer=amap[r.id]; }); }
+  return all;
+}
 async function loadAll(){
-  const [c,p,r,a,sg,pc,sm,rh,ss,pcost] = await Promise.all([
+  const [c,p,results,a,sg,pc,sm,rh,ss,pcost] = await Promise.all([
     sb.from('clients').select('*').order('created_at'),
     sb.from('prompts').select('*'),
-    sb.from('results').select('*').order('run_date',{ascending:false}),
+    loadResults(),
     sb.from('actions').select('*').order('created_at',{ascending:false}),
     sb.from('prompt_suggestions').select('*').order('volume',{ascending:false}),
     sb.from('perception').select('*'),
@@ -515,8 +533,8 @@ async function loadAll(){
     sb.from('service_status').select('*'),
     sb.from('provider_cost').select('*'),
   ]);
-  if(c.error||p.error||r.error){ toast('Load error: '+((c.error||p.error||r.error).message)); }
-  state.clients=c.data||[]; state.prompts=p.data||[]; state.results=r.data||[]; state.actions=a.data||[];
+  if(c.error||p.error){ toast('Load error: '+((c.error||p.error).message)); }
+  state.clients=c.data||[]; state.prompts=p.data||[]; state.results=results||[]; state.actions=a.data||[];
   state.suggestions=sg.data||[]; state.perception=pc.data||[];
   state.srcMentions={}; (sm.data||[]).forEach(x=>{ state.srcMentions[x.url]=x.brands||[]; });
   state.runHealth=rh&&rh.data?rh.data:[]; state.serviceStatus=ss&&ss.data?ss.data:[];
