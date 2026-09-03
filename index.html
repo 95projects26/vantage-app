@@ -376,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -515,10 +515,26 @@ async function loadResults(){
     all=all.concat(data||[]);
     if(!data || data.length<PAGE) break;
   }
-  // hydrate full answer text for the most recent rows (the ones users actually read)
-  const { data:ans } = await sb.from('results').select('id,answer').order('run_date',{ascending:false}).range(0,1499);
-  if(ans && ans.length){ const amap={}; ans.forEach(x=>{ amap[x.id]=x.answer; }); all.forEach(r=>{ if(amap[r.id]!=null) r.answer=amap[r.id]; }); }
+  // NOTE: answer text is NOT loaded here — it's the bulk of the payload and a single
+  // range() is capped at 1000 rows by PostgREST, which silently dropped answers for any
+  // client whose latest run was more than ~1000 rows ago. Instead answers are hydrated
+  // per-client on demand (hydrateClientAnswers) when a client is opened.
   return all;
+}
+// Load full answer text for ONE client (bounded, paginated) and merge into state.results.
+// Runs once per client per loadAll; called when a client view renders.
+async function hydrateClientAnswers(cid){
+  if(!cid || state.answersLoaded.has(cid)) return;
+  state.answersLoaded.add(cid);  // mark first so re-renders don't refetch
+  const byId={}; state.results.forEach(r=>{ if(r.client_id===cid) byId[r.id]=r; });
+  const PAGE=1000;
+  for(let from=0; from<50000; from+=PAGE){
+    const { data, error } = await sb.from('results').select('id,answer').eq('client_id',cid).order('run_date',{ascending:false}).range(from,from+PAGE-1);
+    if(error){ state.answersLoaded.delete(cid); return; }
+    (data||[]).forEach(x=>{ if(byId[x.id]) byId[x.id].answer=x.answer; });
+    if(!data || data.length<PAGE) break;
+  }
+  render();
 }
 async function loadAll(){
   const [c,p,results,a,sg,pc,sm,rh,ss,pcost] = await Promise.all([
@@ -535,6 +551,7 @@ async function loadAll(){
   ]);
   if(c.error||p.error){ toast('Load error: '+((c.error||p.error).message)); }
   state.clients=c.data||[]; state.prompts=p.data||[]; state.results=results||[]; state.actions=a.data||[];
+  state.answersLoaded.clear();  // results objects are rebuilt, re-hydrate answers for the open client
   state.suggestions=sg.data||[]; state.perception=pc.data||[];
   state.srcMentions={}; (sm.data||[]).forEach(x=>{ state.srcMentions[x.url]=x.brands||[]; });
   state.runHealth=rh&&rh.data?rh.data:[]; state.serviceStatus=ss&&ss.data?ss.data:[];
@@ -849,6 +866,7 @@ function renderOps(){
 // ---------- RENDER: client detail ----------
 function renderClient(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
+  hydrateClientAnswers(c.id);   // load this client's full answer text on first view (re-renders when ready)
   if(isClient() && CLIENT_HIDE_TABS.includes(state.tab)) state.tab='overview';
   const titles={overview:'Overview',prompts:'Prompts',explorer:'Prompt Explorer',answers:'All answers',actions:'Actions',competitors:'Competitor Analysis',perception:'AI Perception',sources:'Cited sources'};
   const crumb = isClient() ? `<b>${esc(c.name)}</b>` : `<a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b>`;
