@@ -510,7 +510,7 @@ async function loadResults(){
   const COLS='id,client_id,run_date,model,prompt_text,client_mentioned,client_rank,client_prominence,sentiment,competitors_mentioned,other_brands,cited_domains,cited_urls';
   const PAGE=1000; let all=[];
   for(let from=0; from<200000; from+=PAGE){
-    const { data, error } = await sb.from('results').select(COLS).order('run_date',{ascending:false}).range(from, from+PAGE-1);
+    const { data, error } = await sb.from('results').select(COLS).order('run_date',{ascending:false}).order('id').range(from, from+PAGE-1);   // id tiebreak: stable pages
     if(error){ toast('Load error: '+error.message); break; }
     all=all.concat(data||[]);
     if(!data || data.length<PAGE) break;
@@ -529,7 +529,7 @@ async function hydrateClientAnswers(cid){
   const byId={}; state.results.forEach(r=>{ if(r.client_id===cid) byId[r.id]=r; });
   const PAGE=1000;
   for(let from=0; from<50000; from+=PAGE){
-    const { data, error } = await sb.from('results').select('id,answer').eq('client_id',cid).order('run_date',{ascending:false}).range(from,from+PAGE-1);
+    const { data, error } = await sb.from('results').select('id,answer').eq('client_id',cid).order('run_date',{ascending:false}).order('id').range(from,from+PAGE-1);
     if(error){ state.answersLoaded.delete(cid); return; }
     (data||[]).forEach(x=>{ if(byId[x.id]) byId[x.id].answer=x.answer; });
     if(!data || data.length<PAGE) break;
