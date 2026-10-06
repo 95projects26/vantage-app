@@ -376,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -942,7 +942,7 @@ function overviewHTML(c){
       <span class="btn" style="pointer-events:none">Open sheet ${extIcon()}</span></a>`;
   return sheetBtn + (c.status==='pitch'?pitchSummaryCard(c,s):'') + tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
-      <div class="card"><div class="hd"><div><h3>Prompt performance</h3><p>Best result per model, over the selected window</p></div></div><div class="bd" style="overflow-x:auto">${perf}</div></div>
+      <div class="card"><div class="hd" style="flex-wrap:wrap;gap:10px"><div><h3>Prompt performance</h3><p>Best result per model, over the selected window</p></div><div class="spacer"></div>${perfControls()}</div><div class="bd" style="overflow-x:auto">${perf}</div></div>
       <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
     </div>
     <div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
@@ -989,6 +989,15 @@ function pitchSummaryCard(c, s){
 // Rolling-window prompt table: for each prompt x model, show the BEST result seen anywhere
 // in the selected window (Featured > Listed > Absent). If it showed up any day, it shows up —
 // no false "Absent" just because it didn't run on the very latest date. "—" = didn't run in window.
+function perfControls(){
+  const b=(key,val,lab)=>`<button class="${state[key]===val?'on':''}" onclick="setPerf('${key}','${val}')">${lab}</button>`;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600">Show</span>
+    <div class="seg">${b('perfType','all','All')}${b('perfType','unbranded','Unbranded')}${b('perfType','branded','Branded')}</div>
+    <span style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-left:4px">Sort</span>
+    <div class="seg">${b('perfSort','default','Default')}${b('perfSort','featured','Most featured')}${b('perfSort','visible','Most visible')}</div></div>`;
+}
+window.setPerf=function(key,val){ state[key]=val; render(); };
 function promptPerfTable(c){
   const ps=clientPrompts(c.id);
   const rows=windowRows(c.id, state.windowDays);
@@ -998,20 +1007,28 @@ function promptPerfTable(c){
   const byPM={};
   rows.forEach(r=>{ const p=byPM[r.prompt_text]=byPM[r.prompt_text]||{}; (p[r.model]=p[r.model]||[]).push(r); });
   const texts=[...new Set([...ps.map(p=>p.text), ...Object.keys(byPM)])];
-  const body=texts.map(t=>{
+  let items=texts.map((t,i)=>{
     const kind=promptKind(c.id,t); const pm=byPM[t]||{};
+    let featN=0, mentN=0;
     const cells=models.map(m=>{ const rs=pm[m];
       if(!rs||!rs.length) return `<td><span class="chip off">—</span></td>`;
       const feat=rs.some(r=>r.client_mentioned&&r.client_prominence==='featured');
       const ment=rs.some(r=>r.client_mentioned);
+      if(feat) featN++; if(ment) mentN++;
       const label=feat?'Featured':(ment?'Listed':'Absent');
       return `<td><span class="chip ${ment?'pos':'off'}">${label}</span></td>`; }).join('');
     const mented=Object.values(pm).flat().filter(r=>r.client_mentioned);
     const sc=SENTCHIP(mented.length?promptSentiment(mented):null);
-    return `<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(t)}')"><td style="max-width:320px;font-weight:550">${esc(t)} <span class="viewcue">read${chev()}</span></td>
+    const html=`<tr class="clk" onclick="openPrompt('${c.id}','${encodeURIComponent(t)}')"><td style="max-width:320px;font-weight:550">${esc(t)} <span class="viewcue">read${chev()}</span></td>
       <td><span class="chip ${kind==='branded'?'neu':'off'}">${kind}</span></td>${cells}<td><span class="chip ${sc[0]}">${sc[1]}</span></td></tr>`;
-  }).join('');
-  return `<table>${head}<tbody>${body}</tbody></table>`;
+    return {i, kind, featN, mentN, html};
+  });
+  // type filter (branded vs unbranded), then sort (sort never hides rows)
+  if(state.perfType!=='all') items=items.filter(x=> state.perfType==='branded' ? x.kind==='branded' : x.kind!=='branded');
+  if(state.perfSort==='featured') items.sort((a,b)=> b.featN-a.featN || b.mentN-a.mentN || a.i-b.i);
+  else if(state.perfSort==='visible') items.sort((a,b)=> b.mentN-a.mentN || b.featN-a.featN || a.i-b.i);
+  if(!items.length) return `<div class="note">No ${state.perfType} prompts for this client.</div>`;
+  return `<table>${head}<tbody>${items.map(x=>x.html).join('')}</tbody></table>`;
 }
 // Sentiment for a prompt across all its mentions in the window, by share of mentions
 // (not worst-case): the dominant sentiment wins, "mixed" only for a genuine split.
