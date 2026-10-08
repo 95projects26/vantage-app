@@ -739,7 +739,7 @@ const REPO='95projects26/ai-visibility-monitor', SBREF='fqvcsegmfxfmozqkgbtg';
 const CONSOLES = {
   providers:[
     {name:'DataForSEO · every AI answer', domain:'dataforseo.com', secret:'DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD', links:[['Dashboard','https://app.dataforseo.com/api-dashboard'],['Top up / auto-recharge','https://app.dataforseo.com/billing']]},
-    {name:'Anthropic · Haiku analyzer', domain:'anthropic.com', secret:'ANTHROPIC_API_KEY', links:[['Usage','https://console.anthropic.com/settings/usage'],['Billing','https://console.anthropic.com/settings/billing'],['API keys','https://console.anthropic.com/settings/keys']]},
+    {name:'Anthropic · Haiku 5.5 analyzer', domain:'anthropic.com', secret:'ANTHROPIC_API_KEY', links:[['Usage','https://console.anthropic.com/settings/usage'],['Billing','https://console.anthropic.com/settings/billing'],['API keys','https://console.anthropic.com/settings/keys']]},
   ],
   infra:[
     {name:'Supabase · database', domain:'supabase.com', secret:'SUPABASE_URL / SUPABASE_SERVICE_KEY', links:[['Project','https://supabase.com/dashboard/project/'+SBREF],['Table editor','https://supabase.com/dashboard/project/'+SBREF+'/editor'],['SQL editor','https://supabase.com/dashboard/project/'+SBREF+'/sql/new'],['Logs','https://supabase.com/dashboard/project/'+SBREF+'/logs/explorer']]},
@@ -778,8 +778,8 @@ function renderOps(){
   const meta=dfs.meta||{}, calls=meta.calls_30d||{}, others=meta.other_by_api_30d||{};
   const tot30=sum(l30), totMtd=sum(mtd), perDay=tot30/30;
   const runway=(dfs.balance!=null&&perDay>0)? Math.floor(dfs.balance/perDay) : null;
-  // Anthropic Haiku analyzer is the one cost billed outside DataForSEO (estimate: ~$0.003/answer scored)
-  const HAIKU=0.003;
+  // Anthropic Haiku 5.5 analyzer is the one cost billed outside DataForSEO (measured ~$0.00025/answer scored)
+  const HAIKU=0.00025;
   const haiku30=state.results.filter(r=>r.run_date>=d30start&&r.run_date<=today).length*HAIKU;
   const haikuMtd=state.results.filter(r=>r.run_date&&r.run_date.slice(0,7)===ym).length*HAIKU;
   const wf=(state.runHealth||[]).find(h=>h.source==='workflow');
@@ -820,7 +820,7 @@ function renderOps(){
       ${modelRows}
       ${row(svcLogo('dataforseo.com','DataForSEO'),'AI answers total','what the monitor costs',ansMtd,ans30,null,null,'',true)}
       ${row(svcLogo('dataforseo.com','DataForSEO'),'Other tools on this account',otherSub,otherMtd,other30,null,null,'')}
-      ${row(svcLogo('anthropic.com','Anthropic'),'Anthropic · Haiku analyzer','scores sentiment + mentions · billed by Anthropic',haikuMtd,haiku30,null,HAIKU,estTag)}
+      ${row(svcLogo('anthropic.com','Anthropic'),'Anthropic · Haiku 5.5 analyzer','scores sentiment + mentions · billed by Anthropic',haikuMtd,haiku30,null,HAIKU,estTag)}
       <div style="margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.55">Balance is checked live every 10 minutes. Spend is tallied after every run. "Other tools" is everything else on this DataForSEO account that isn't the monitor (e.g. Prospector, the AI Pitch Sheet's DR/traffic lookups), broken down by API. The Haiku analyzer is the only cost outside DataForSEO; exact charges are in the Anthropic console below.</div>
     </div></div>`;
   // Run health
