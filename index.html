@@ -738,11 +738,8 @@ const MODEL_META = {
 const REPO='95projects26/ai-visibility-monitor', SBREF='fqvcsegmfxfmozqkgbtg';
 const CONSOLES = {
   providers:[
-    {model:'openai', secret:'OPENAI_API_KEY', links:[['Usage','https://platform.openai.com/usage'],['Billing','https://platform.openai.com/settings/organization/billing/overview'],['API keys','https://platform.openai.com/api-keys']]},
-    {model:'anthropic', secret:'ANTHROPIC_API_KEY', links:[['Usage','https://console.anthropic.com/settings/usage'],['Billing','https://console.anthropic.com/settings/billing'],['API keys','https://console.anthropic.com/settings/keys']]},
-    {model:'perplexity', secret:'PERPLEXITY_API_KEY', links:[['API + billing','https://www.perplexity.ai/settings/api']]},
-    {model:'gemini', secret:'GEMINI_API_KEY', links:[['API keys','https://aistudio.google.com/app/apikey'],['Cloud billing','https://console.cloud.google.com/billing']]},
-    {model:'aio', secret:'DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD', links:[['Dashboard','https://app.dataforseo.com/api-dashboard'],['Top up balance','https://app.dataforseo.com/billing']]},
+    {name:'DataForSEO · every AI answer', domain:'dataforseo.com', secret:'DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD', links:[['Dashboard','https://app.dataforseo.com/api-dashboard'],['Top up / auto-recharge','https://app.dataforseo.com/billing']]},
+    {name:'Anthropic · Haiku analyzer', domain:'anthropic.com', secret:'ANTHROPIC_API_KEY', links:[['Usage','https://console.anthropic.com/settings/usage'],['Billing','https://console.anthropic.com/settings/billing'],['API keys','https://console.anthropic.com/settings/keys']]},
   ],
   infra:[
     {name:'Supabase · database', domain:'supabase.com', secret:'SUPABASE_URL / SUPABASE_SERVICE_KEY', links:[['Project','https://supabase.com/dashboard/project/'+SBREF],['Table editor','https://supabase.com/dashboard/project/'+SBREF+'/editor'],['SQL editor','https://supabase.com/dashboard/project/'+SBREF+'/sql/new'],['Logs','https://supabase.com/dashboard/project/'+SBREF+'/logs/explorer']]},
@@ -758,61 +755,74 @@ function timeAgo(iso){ if(!iso) return '—'; const s=(Date.now()-new Date(iso).
 function spendByModel(pred){ const o={}; state.results.forEach(r=>{ if(pred(r)) o[r.model]=(o[r.model]||0)+(MODEL_COST[r.model]||0); }); return o; }
 const HEALTH_COL = {ok:'var(--pos)', success:'var(--pos)', empty:'var(--faint)', error:'var(--neg)', failure:'var(--neg)', cancelled:'var(--neg)'};
 
+window.refreshBalance=async function(){
+  const b=$('balBtn'); if(b){ b.disabled=true; b.innerHTML='<span class="mini-spin"></span>Checking…'; }
+  const r1=await sb.rpc('refresh_dfs_balance');
+  if(r1.error){ toast('Error: '+r1.error.message); if(b){b.disabled=false;b.textContent='Refresh balance';} return; }
+  await new Promise(res=>setTimeout(res,3500));   // let Supabase's request to DataForSEO come back
+  await sb.rpc('refresh_dfs_balance');
+  await loadAll(); render(); toast('Balance updated');
+};
 function renderOps(){
   $('topbar').innerHTML = `<div><div class="crumb">Workspace</div><div class="h1">Backend</div></div>
     <div class="spacer"></div>
+    <button class="btn ghost" id="balBtn" onclick="refreshBalance()">Refresh balance</button>
     <button class="btn ghost" onclick="loadAndRender()">Refresh</button>`;
   const today=new Date().toISOString().slice(0,10), ym=today.slice(0,7);
   const d30start=shiftDate(today,-29);
-  const mtd=spendByModel(r=>r.run_date&&r.run_date.slice(0,7)===ym);
-  const l30=spendByModel(r=>r.run_date>=d30start&&r.run_date<=today);
-  // Real billed cost from provider_cost (OpenAI/Anthropic admin cost APIs), keyed by service.
-  const realCost=pred=>{ const o={}; (state.providerCost||[]).forEach(x=>{ if(pred(x.cost_date)) o[x.service]=(o[x.service]||0)+Number(x.amount||0); }); return o; };
-  const realMtd=realCost(d=>d&&d.slice(0,7)===ym), realL30=realCost(d=>d>=d30start&&d<=today);
-  const hasReal=m=>Object.prototype.hasOwnProperty.call(realL30,m)||Object.prototype.hasOwnProperty.call(realMtd,m);
-  const effMtd=m=>hasReal(m)?(realMtd[m]||0):(mtd[m]||0);
-  const effL30=m=>hasReal(m)?(realL30[m]||0):(l30[m]||0);
-  const anyReal=(state.providerCost||[]).length>0;
-  const burn=Object.keys(MODEL_META).filter(m=>LIVE_MODELS.includes(m)).reduce((s,m)=>s+effL30(m),0);
-  // DataForSEO real balance
-  const dfs=(state.serviceStatus||[]).find(s=>s.service==='dataforseo');
-  const aioDaily=(() => { const days=[...new Set(state.results.filter(r=>r.model==='aio').map(r=>r.run_date))].sort().slice(-7);
-    if(!days.length) return 0; const c=state.results.filter(r=>r.model==='aio'&&days.includes(r.run_date)).length*MODEL_COST.aio; return c/days.length; })();
-  const runway=(dfs&&dfs.balance!=null&&aioDaily>0)? Math.floor(dfs.balance/aioDaily) : null;
-  // last run health
+  // Exact billed cost from DataForSEO's task log (provider_cost rows "dfs:<model>"), per UTC day.
+  const billed=pred=>{ const o={}; (state.providerCost||[]).forEach(x=>{ if(String(x.service).startsWith('dfs:')&&pred(x.cost_date)){ const k=x.service.slice(4); o[k]=(o[k]||0)+Number(x.amount||0);} }); return o; };
+  const mtd=billed(d=>d&&d.slice(0,7)===ym), l30=billed(d=>d>=d30start&&d<=today);
+  const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
+  const dfs=(state.serviceStatus||[]).find(s=>s.service==='dataforseo')||{};
+  const meta=dfs.meta||{}, calls=meta.calls_30d||{}, others=meta.other_by_api_30d||{};
+  const tot30=sum(l30), totMtd=sum(mtd), perDay=tot30/30;
+  const runway=(dfs.balance!=null&&perDay>0)? Math.floor(dfs.balance/perDay) : null;
+  // Anthropic Haiku analyzer is the one cost billed outside DataForSEO (estimate: ~$0.003/answer scored)
+  const HAIKU=0.003;
+  const haiku30=state.results.filter(r=>r.run_date>=d30start&&r.run_date<=today).length*HAIKU;
+  const haikuMtd=state.results.filter(r=>r.run_date&&r.run_date.slice(0,7)===ym).length*HAIKU;
   const wf=(state.runHealth||[]).find(h=>h.source==='workflow');
   const lastRunAgo = state.runHealth.length? timeAgo(state.runHealth[0].created_at) : '—';
 
-  const balTile = dfs&&dfs.balance!=null
-    ? tile('DataForSEO balance', money(dfs.balance), (runway!=null?`~${runway} days of AI Overviews left`:'real balance')+` · ${timeAgo(dfs.checked_at)}`, dfs.balance<25?'var(--neg)':'var(--pos)')
-    : tile('DataForSEO balance', '—', 'shows after next run', 'var(--faint)');
-
-  const tiles = `<div class="tiles" style="grid-template-columns:repeat(3,1fr);max-width:720px">
-    ${tile((anyReal?'Monthly burn':'Est. monthly burn'), money(burn), 'all providers · last 30 days'+(anyReal?' · real where available':''), 'var(--accent)')}
+  const balTile = dfs.balance!=null
+    ? tile('DataForSEO balance', money(dfs.balance), `live · checked ${timeAgo(dfs.checked_at)}`+(runway!=null?` · ~${runway} days at current spend`:''), runway!=null&&runway<14?'var(--neg)':'var(--pos)', runway!=null&&runway<14?'var(--neg)':null)
+    : tile('DataForSEO balance', '—', 'checking…', 'var(--faint)');
+  const tiles = `<div class="tiles" style="grid-template-columns:repeat(4,1fr)">
     ${balTile}
+    ${tile('Spent this month', money(totMtd), `billed by DataForSEO · + ~${money(haikuMtd)} Haiku`, 'var(--accent)')}
+    ${tile('Last 30 days', money(tot30), `~${money(perDay)}/day · billed by DataForSEO`, 'var(--s2)')}
     ${tile('Last run', lastRunAgo, wf?('job '+esc(wf.status)):'per-client below', wf&&HEALTH_COL[wf.status]||'var(--s2)')}
   </div>`;
 
-  // Spend-by-provider table (estimated)
-  const realTag='<span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--pos);background:color-mix(in srgb,var(--pos) 14%,transparent);padding:1px 6px;border-radius:5px">BILLED</span>';
+  const billedTag='<span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--pos);background:color-mix(in srgb,var(--pos) 14%,transparent);padding:1px 6px;border-radius:5px">BILLED</span>';
   const estTag='<span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--faint);background:var(--panel-2);padding:1px 6px;border-radius:5px">EST</span>';
-  const provRows = Object.keys(MODEL_META).filter(m=>LIVE_MODELS.includes(m)).map(m=>{
-    const meta=MODEL_META[m], real=hasReal(m);
-    return `<div class="urlrow" style="display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:9px;min-width:0">${svcLogo(meta.domain,meta.name)}<span style="font-weight:600">${esc(meta.name)}</span></div>
-      <div class="tnum">${money(effMtd(m))}</div>
-      <div class="tnum">${money(effL30(m))}</div>
-      <div style="font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:6px">${real?realTag:estTag}<span>${real?'from '+esc(meta.bill):'billed by '+esc(meta.bill)}</span></div>
-    </div>`;
+  const GRID='display:grid;grid-template-columns:1.7fr .8fr .8fr .7fr .7fr;gap:12px;align-items:center';
+  const row=(logo,name,sub,m,l,n,per,tag,bold)=>`<div style="${GRID};padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">${logo}<div style="min-width:0"><div style="font-weight:${bold?700:600}">${name}</div>${sub?`<div style="font-size:11px;color:var(--faint);margin-top:1px">${sub}</div>`:''}</div></div>
+      <div class="tnum" style="${bold?'font-weight:700':''}">${money(m)}</div>
+      <div class="tnum" style="${bold?'font-weight:700':''}">${money(l)}</div>
+      <div class="tnum" style="color:var(--muted)">${n==null?'—':n.toLocaleString()}</div>
+      <div class="tnum" style="color:var(--muted);display:flex;align-items:center;gap:6px">${per==null?'':('$'+per.toFixed(3))}${tag||''}</div></div>`;
+  const MODELS=[['openai','ChatGPT','gpt-5.6-luna · free tier'],['anthropic','Claude','claude-sonnet-5 · free tier'],['gemini','Gemini','gemini-3.5-flash · free tier'],
+                ['perplexity','Perplexity','sonar · free tier'],['aio','Google AI Overviews','Google SERP via DataForSEO']];
+  const modelRows=MODELS.map(([k,n,sub])=>{ const mb=MB(k);
+    const logo=`<span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span></span>`;
+    return row(logo,n,sub,mtd[k]||0,l30[k]||0,calls[k]||0,calls[k]?(l30[k]||0)/calls[k]:null,'');
   }).join('');
-  const spendCard = `<div class="card"><div class="hd"><div><h3>Spend by provider</h3><p><b style="color:var(--pos)">BILLED</b> = real cost from the provider's API · <b>EST</b> = from call volume</p></div></div>
+  const ansMtd=MODELS.reduce((a,[k])=>a+(mtd[k]||0),0), ans30=MODELS.reduce((a,[k])=>a+(l30[k]||0),0);
+  const otherSub=Object.keys(others).length? Object.entries(others).slice(0,4).map(([k,v])=>esc(k)+' '+money(v)).join(' · ') : 'none';
+  const otherMtd=(mtd.other||0)+(mtd.refund||0), other30=(l30.other||0)+(l30.refund||0);
+  const spendCard = `<div class="card"><div class="hd"><div><h3>Spend by model</h3><p>${billedTag} exact cost from DataForSEO's own task log · refreshed ${timeAgo(meta.spend_refreshed_at)}</p></div></div>
     <div class="bd">
-      <div style="display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--border)">
-        <div>Provider</div><div>This month</div><div>Last 30d</div><div>Source</div></div>
-      ${provRows}
-      <div style="margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.5">${anyReal?'<b style="color:var(--pos)">BILLED</b> rows show the exact invoiced dollars from each provider (OpenAI/Anthropic admin cost APIs).':'Add <span style="font-family:var(--font-mono)">OPENAI_ADMIN_KEY</span> + <span style="font-family:var(--font-mono)">ANTHROPIC_ADMIN_KEY</span> as GitHub secrets to swap the OpenAI/Anthropic estimates for real billed dollars.'} Perplexity &amp; Google have no cost API, so they stay estimated — open their console below for exact charges.</div>
+      <div style="${GRID};font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <div>Model</div><div>This month</div><div>Last 30d</div><div>Calls 30d</div><div>Per call</div></div>
+      ${modelRows}
+      ${row(svcLogo('dataforseo.com','DataForSEO'),'AI answers total','what the monitor costs',ansMtd,ans30,null,null,'',true)}
+      ${row(svcLogo('dataforseo.com','DataForSEO'),'Other tools on this account',otherSub,otherMtd,other30,null,null,'')}
+      ${row(svcLogo('anthropic.com','Anthropic'),'Anthropic · Haiku analyzer','scores sentiment + mentions · billed by Anthropic',haikuMtd,haiku30,null,HAIKU,estTag)}
+      <div style="margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.55">Balance is checked live every 10 minutes. Spend is tallied after every run. "Other tools" is everything else on this DataForSEO account that isn't the monitor (e.g. Prospector, the AI Pitch Sheet's DR/traffic lookups), broken down by API. The Haiku analyzer is the only cost outside DataForSEO; exact charges are in the Anthropic console below.</div>
     </div></div>`;
-
   // Run health
   const clientHealth = state.clients.map(c=>{
     const h=(state.runHealth||[]).find(x=>x.client_id===c.id);
@@ -841,7 +851,7 @@ function renderOps(){
 
   // Console link cards
   const linkBtns = links => links.map(([lbl,url])=>`<a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener" style="padding:5px 10px;font-size:12px">${esc(lbl)} ${extIcon()}</a>`).join('');
-  const provConsoles = CONSOLES.providers.map(s=>{ const meta=MODEL_META[s.model];
+  const provConsoles = CONSOLES.providers.map(s=>{ const meta={name:s.name,domain:s.domain};
     return `<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--border)">
       ${svcLogo(meta.domain,meta.name)}
       <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(meta.name)}</div>
@@ -854,7 +864,7 @@ function renderOps(){
         <div style="font-size:11px;color:var(--faint);font-family:var(--font-mono);margin-top:2px">${esc(s.secret)}</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">${linkBtns(s.links)}</div></div></div>`).join('');
   const consoleCard = `<div class="grid two" style="grid-template-columns:1fr 1fr;margin-top:16px">
-    <div class="card"><div class="hd"><div><h3>AI provider consoles</h3><p>Keys, usage & billing — one click</p></div></div><div class="bd">${provConsoles}</div></div>
+    <div class="card"><div class="hd"><div><h3>AI provider consoles</h3><p>Keys, usage & billing · OpenAI, Perplexity &amp; Gemini direct keys are no longer used</p></div></div><div class="bd">${provConsoles}</div></div>
     <div class="card"><div class="hd"><div><h3>Infrastructure</h3><p>Database, the daily run, logos</p></div></div><div class="bd">${infraConsoles}</div></div>
   </div>`;
 
