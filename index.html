@@ -376,7 +376,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', anaPartial:false, answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -595,7 +595,11 @@ function windowRows(cid, days){ const md=maxDate(cid); if(!md) return [];
   const start=shiftDate(md, -(days-1)); return viewResults(cid).filter(r=>r.run_date>=start && r.run_date<=md); }
 function promptKind(cid, text){
   const p=clientPrompts(cid).find(x=>x.text===text);
-  return p?p.kind:'unbranded';
+  if(p) return p.kind;
+  // answer for a since-deleted/edited prompt: classify by the text itself, so an old
+  // "Is <brand> good?" row can never leak into the unbranded numbers
+  const c=state.clients.find(x=>x.id===cid);
+  return kindFor([...(c&&c.aliases||[]), c&&c.name].filter(Boolean), text);
 }
 // Percentage/majority-based label: the dominant sentiment wins; "Mixed" only when
 // pos and neg are genuinely close (neither clears a 60% majority of all mentions).
@@ -656,7 +660,7 @@ function renderNav(){
   } else {
     const c=state.clients.find(x=>x.id===state.clientId);
     nav.innerHTML = '<div class="navlbl">'+esc(c?c.name:'')+'</div>'+
-      dropTabsForClient(['overview','Overview',barIcon(),'prompts','Prompts',listIcon(),'explorer','Prompt Explorer',compassIcon(),'answers','Answers',chatIcon(),'actions','Actions',boltIcon(),'competitors','Competitor Analysis',peopleIcon(),'perception','AI Perception',eyeIcon2(),'sources','Cited sources',linkIcon()], 3)
+      dropTabsForClient(['overview','Overview',barIcon(),'analysis','Analysis',trendIcon(),'prompts','Prompts',listIcon(),'explorer','Prompt Explorer',compassIcon(),'answers','Answers',chatIcon(),'actions','Actions',boltIcon(),'competitors','Competitor Analysis',peopleIcon(),'perception','AI Perception',eyeIcon2(),'sources','Cited sources',linkIcon()], 3)
       .reduce((acc,_,i,a)=> i%3===0? acc+navTab(a[i],a[i+1],a[i+2]) : acc, '') +
       (isClient()?'':'<div class="navsec" style="padding:0"><button class="navitem" onclick="go(\'clients\')" style="margin-top:8px">'+backIcon()+'All clients</button></div>');
   }
@@ -664,6 +668,7 @@ function renderNav(){
 const navBtn=(v,l,active,icon)=>`<button class="navitem ${active?'active':''}" onclick="go('${v}')">${icon}${l}</button>`;
 const navTab=(t,l,icon)=>`<button class="navitem ${state.tab===t?'active':''}" onclick="setTab('${t}')">${icon}${l}${t==='prompts'?'<span class="badge">'+clientPrompts(state.clientId).length+'</span>':''}</button>`;
 function gridIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';}
+function trendIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>';}
 function barIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13h6v8H3zM15 3h6v18h-6zM9 8h6v13H9z"/></svg>';}
 function listIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';}
 function peopleIcon(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M15 20a4 4 0 0 1 6 0"/></svg>';}
@@ -878,7 +883,7 @@ function renderClient(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
   hydrateClientAnswers(c.id);   // load this client's full answer text on first view (re-renders when ready)
   if(isClient() && CLIENT_HIDE_TABS.includes(state.tab)) state.tab='overview';
-  const titles={overview:'Overview',prompts:'Prompts',explorer:'Prompt Explorer',answers:'All answers',actions:'Actions',competitors:'Competitor Analysis',perception:'AI Perception',sources:'Cited sources'};
+  const titles={overview:'Overview',analysis:'Analysis',prompts:'Prompts',explorer:'Prompt Explorer',answers:'All answers',actions:'Actions',competitors:'Competitor Analysis',perception:'AI Perception',sources:'Cited sources'};
   const crumb = isClient() ? `<b>${esc(c.name)}</b>` : `<a onclick="go('clients')">Clients</a> / <b>${esc(c.name)}</b>`;
   $('topbar').innerHTML = `<div><div class="crumb">${crumb}</div><div class="h1">${titles[state.tab]}</div></div>
     <div class="spacer"></div>
@@ -889,10 +894,11 @@ function renderClient(){
     <button class="btn ghost" title="Client settings" style="padding:8px 10px" onclick="clientSettingsModal('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="btn" id="runBtn" onclick="runNow()" ${state.running?'disabled':''}>${state.running?'<span class="mini-spin"></span>Running…':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run now'}</button>`}`;
   const tabbar = `<div class="tabs">`+
-    dropTabsForClient(['overview','Overview','prompts','Prompts','explorer','Prompt Explorer','answers','Answers','actions','Actions','competitors','Competitor Analysis','perception','AI Perception','sources','Cited sources'], 2)
+    dropTabsForClient(['overview','Overview','analysis','Analysis','prompts','Prompts','explorer','Prompt Explorer','answers','Answers','actions','Actions','competitors','Competitor Analysis','perception','AI Perception','sources','Cited sources'], 2)
     .reduce((a,_,i,arr)=> i%2===0? a+`<button class="tab ${state.tab===arr[i]?'on':''}" onclick="setTab('${arr[i]}')">${arr[i+1]}</button>`:a,'')+`</div>`;
   let body='';
   if(state.tab==='overview') body=overviewHTML(c);
+  else if(state.tab==='analysis') body=analysisHTML(c);
   else if(state.tab==='prompts') body=promptsHTML(c);
   else if(state.tab==='explorer') body=explorerHTML(c);
   else if(state.tab==='perception') body=perceptionHTML(c);
@@ -909,14 +915,14 @@ function overviewHTML(c){
   if(!rows.length) return emptyClient();
   const s=summary(c.id);
   const visSub = s.prevVis!=null
-    ? `${s.unbMent} of ${s.unbTotal} buyer-intent answers · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
-    : `${s.unbMent} of ${s.unbTotal} buyer-intent answers · ${winText()}`;
-  const sovSub = s.rank ? `of ${s.totalBrands} brands named`
+    ? `${s.unbMent} of ${s.unbTotal} unbranded answers · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
+    : `${s.unbMent} of ${s.unbTotal} unbranded answers · ${winText()}`;
+  const sovSub = s.rank ? `of ${s.totalBrands} brands on unbranded prompts`
     : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data');
   const uTot=s.usc.positive+s.usc.neutral+s.usc.negative;
   const repSub = s.brandedCount ? `${s.bsc.positive} pos · ${s.bsc.neutral} neu · ${s.bsc.negative} neg` : 'no branded prompts';
   const uSentSub = uTot ? `${s.usc.positive} pos · ${s.usc.neutral} neu · ${s.usc.negative} neg` : 'no unbranded mentions yet';
-  const tiles = `<div class="eyebrow" style="margin-bottom:11px">${state.windowDays>=3650?'All-time':'Rolling '+state.windowDays+'-day'} window · visibility on buyer-intent prompts · through ${esc(s.windowEnd||'')}</div><div class="tiles">
+  const tiles = `<div class="eyebrow" style="margin-bottom:11px">${state.windowDays>=3650?'All-time':'Rolling '+state.windowDays+'-day'} window · visibility + share of voice on unbranded prompts only · through ${esc(s.windowEnd||'')}</div><div class="tiles">
     ${tile('AI Visibility', s.unbTotal? s.vis+'%':'—', visSub, s.unbTotal&&s.vis<40?'var(--neg)':'var(--accent)', s.unbTotal&&s.vis<40?'var(--neg)':null)}
     ${tile('Share of voice', s.rank?('#'+s.rank):'—', sovSub, 'var(--s2)')}
     ${tile('Branded reputation', s.brandedCount? s.bSentLabel:'—', repSub, 'var(--neu)', null, 22)}
@@ -1166,6 +1172,89 @@ function competitorsHTML(c){
   return `<div class="eyebrow" style="margin-bottom:12px">You vs. competitors · unbranded prompts · ${winText()}</div>
     <div class="card"><div class="hd"><div><h3>Visibility over time</h3><p>Share of AI answers naming each brand (${esc(c.name)} in blue)</p></div></div><div class="bd">${chart}${legend}</div></div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Ranking</h3><p>Every brand the models name on your prompts</p></div></div><div class="bd" style="overflow-x:auto">${table}</div></div>`;
+}
+// ---------- ANALYSIS: one row per run, unbranded prompts only ----------
+// A "run" is one run_date. Early history was collected in small daily slices, so a
+// date that answered under 60% of the unbranded prompt set is flagged Partial: it's
+// listed (behind a toggle) but kept out of the trend line and the run-over-run change.
+function runStats(cid){
+  const unb=windowRows(cid, state.windowDays).filter(r=>promptKind(cid,r.prompt_text)!=='branded');
+  const nPrompts=clientPrompts(cid).filter(p=>p.kind!=='branded').length || 1;
+  const models=CANON_MODELS.filter(m=>unb.some(r=>r.model===m));
+  const g=groupBy(unb,'run_date');
+  const runs=Object.keys(g).sort().reverse().map(d=>{
+    const rs=g[d], ment=rs.filter(r=>r.client_mentioned);
+    const ranks=ment.map(r=>r.client_rank).filter(x=>x!=null&&x>0);
+    const sc={positive:0,neutral:0,negative:0}; ment.forEach(r=>{ if(sc[r.sentiment]!=null) sc[r.sentiment]++; });
+    const byModel={}; models.forEach(m=>{ const mr=rs.filter(r=>r.model===m);
+      byModel[m]= mr.length? {n:mr.length, vis:Math.round(mr.filter(r=>r.client_mentioned).length/mr.length*100)} : null; });
+    const promptsHit=new Set(rs.map(r=>r.prompt_text)).size;
+    return { date:d, n:rs.length, ment:ment.length, vis:Math.round(ment.length/rs.length*100),
+      feat:ment.filter(r=>r.client_prominence==='featured').length,
+      avgRank: ranks.length? ranks.reduce((a,b)=>a+b,0)/ranks.length : null,
+      sc, byModel, promptsHit, partial: promptsHit/nPrompts < 0.6 };
+  });
+  // change vs the previous FULL run (older), in percentage points
+  const full=runs.filter(r=>!r.partial);
+  full.forEach((r,i)=>{ const prev=full[i+1]; r.delta= prev? r.vis-prev.vis : null; });
+  return {runs, full, models, nPrompts};
+}
+function runChart(full){
+  const pts=full.slice().reverse();   // oldest -> newest
+  const W=760,H=200,pl=34,pr=18,pt=22,pb=26, n=pts.length;
+  const max=Math.max(20, ...pts.map(p=>p.vis)); const top=Math.ceil(max/10)*10;
+  const iw=W-pl-pr, ih=H-pt-pb;
+  const x=i=> n<=1? pl+iw/2 : pl+iw*i/(n-1), y=v=> pt+ih*(1-v/top);
+  let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="AI visibility per run">`;
+  for(let t=0;t<=4;t++){ const val=Math.round(top*t/4), yy=y(val);
+    svg+=`<line x1="${pl}" y1="${yy}" x2="${W-pr}" y2="${yy}" stroke="var(--border)" stroke-width="1"/>`+
+      `<text x="${pl-6}" y="${yy+3.5}" text-anchor="end" font-size="9" fill="var(--faint)" font-family="var(--font-mono)">${val}%</text>`; }
+  const line=pts.map((p,i)=>`${x(i)},${y(p.vis)}`).join(' ');
+  if(n>1) svg+=`<polygon points="${x(0)},${y(0)} ${line} ${x(n-1)},${y(0)}" fill="var(--accent)" opacity=".08"/>`+
+    `<polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const step=Math.max(1,Math.ceil(n/12));
+  pts.forEach((p,i)=>{ const last=i===n-1;
+    svg+=`<circle cx="${x(i)}" cy="${y(p.vis)}" r="${last?4.2:3}" fill="${last?'var(--accent)':'var(--panel)'}" stroke="var(--accent)" stroke-width="2"/>`;
+    if(n<=16||last||(n-1-i)%step===0) svg+=`<text x="${x(i)}" y="${y(p.vis)-9}" text-anchor="middle" font-size="10" font-weight="650" fill="var(--text)" font-family="var(--font-mono)">${p.vis}%</text>`;
+    if((n-1-i)%step===0) svg+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--faint)" font-family="var(--font-mono)">${esc(p.date.slice(5))}</text>`; });
+  return svg+'</svg>';
+}
+window.toggleAnaPartial=function(){ state.anaPartial=!state.anaPartial; render(); };
+function analysisHTML(c){
+  const {runs, full, models} = runStats(c.id);
+  if(!runs.length) return `<div class="note">No unbranded results in this window yet. Try a longer window (All) or check back after the next run.</div>`;
+  const nPartial=runs.length-full.length;
+  const shown=state.anaPartial? runs : full;
+  const latest=full[0], first=full[full.length-1];
+  const scope=state.modelFilter==='all'?'all models':MB(state.modelFilter).n;
+  const dChip=d=> d==null? '<span class="sub">first</span>'
+    : `<span class="chip ${d>0?'pos':d<0?'neg':'off'}">${d>0?'▲ +':d<0?'▼ ':''}${d===0?'no change':d+' pts'}</span>`;
+  const sentTxt=sc=>{ const t=sc.positive+sc.neutral+sc.negative; return t? `${sentLabelOf(sc)} <span class="sub">${sc.positive}/${sc.neutral}/${sc.negative}</span>` : '<span class="sub">n/a</span>'; };
+  const head=`<tr><th>Run date</th><th>Answers</th><th>AI visibility</th><th>Mentioned</th><th>Featured</th><th>Avg position</th>${models.map(m=>`<th>${esc(MB(m).n.replace('Google AI Overviews','AI Overviews'))}</th>`).join('')}<th title="positive / neutral / negative">Sentiment when found</th><th>vs previous run</th></tr>`;
+  const body=shown.map(r=>`<tr style="${r.partial?'opacity:.55':''}">
+      <td class="tnum" style="font-weight:650;white-space:nowrap">${esc(r.date)}${r.partial?' <span class="chip off" title="Answered '+r.promptsHit+' of the unbranded prompts">Partial</span>':''}</td>
+      <td class="tnum">${r.n}</td>
+      <td class="tnum" style="font-weight:700;font-size:14px">${r.vis}%</td>
+      <td class="tnum">${r.ment} of ${r.n}</td>
+      <td class="tnum">${r.feat}</td>
+      <td class="tnum">${r.avgRank!=null?'#'+r.avgRank.toFixed(1):'<span class="sub">n/a</span>'}</td>
+      ${models.map(m=>{ const v=r.byModel[m]; return `<td class="tnum">${v?v.vis+'%':'<span class="sub">n/a</span>'}</td>`; }).join('')}
+      <td style="white-space:nowrap">${sentTxt(r.sc)}</td>
+      <td>${r.partial?'<span class="sub">n/a</span>':dChip(r.delta)}</td></tr>`).join('');
+  const sinceStart = latest && first && latest!==first ? latest.vis-first.vis : null;
+  const tiles = latest ? `<div class="tiles">
+    ${tile('Latest run', latest.vis+'%', `${latest.ment} of ${latest.n} unbranded answers · ${latest.date}`, 'var(--accent)')}
+    ${tile('vs previous run', latest.delta==null?'n/a':(latest.delta>0?'+':'')+latest.delta+' pts', full[1]?`${full[1].vis}% on ${full[1].date}`:'only one full run so far', latest.delta>0?'var(--pos)':latest.delta<0?'var(--neg)':'var(--border)', latest.delta>0?'var(--pos)':latest.delta<0?'var(--neg)':null)}
+    ${tile('Since first run', sinceStart==null?'n/a':(sinceStart>0?'+':'')+sinceStart+' pts', first?`${first.vis}% on ${first.date}`:'', sinceStart>0?'var(--pos)':sinceStart<0?'var(--neg)':'var(--border)', sinceStart>0?'var(--pos)':sinceStart<0?'var(--neg)':null)}
+    ${tile('Featured, latest run', String(latest.feat), `of ${latest.ment} mentions named as a top pick`, 'var(--s2)')}
+  </div>` : '';
+  const chart = full.length>1 ? runChart(full) : `<div class="note">The trend line starts after the second full run.</div>`;
+  const toggle = nPartial ? `<button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="toggleAnaPartial()">${state.anaPartial?'Hide':'Show'} ${nPartial} partial run${nPartial===1?'':'s'}</button>` : '';
+  return `<div class="eyebrow" style="margin-bottom:12px">Run by run · unbranded prompts only · ${esc(scope)} · ${winText()}</div>
+    ${tiles}
+    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>AI visibility per run</h3><p>Share of unbranded answers that name ${esc(c.name)}, one point per full run</p></div></div><div class="bd">${chart}</div></div>
+    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every run</h3><p>Newest first. Branded prompts and competitors are left out.</p></div><div class="spacer"></div>${toggle}</div>
+      <div class="bd" style="overflow-x:auto">${shown.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<div class="note">Only partial runs in this window.</div>'}</div></div>`;
 }
 function srcHost(u){ try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u;} }
 // Per-URL: how many answers used it (Used), avg times cited per answer (Avg),
