@@ -1310,7 +1310,8 @@ function analysisHTML(c){
     ${tiles}
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>AI visibility per run</h3><p>Share of unbranded answers that name ${esc(c.name)}, one point per full run</p></div></div><div class="bd">${chart}</div></div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every run</h3><p>Newest first. Click a run to see which prompts changed. Branded prompts and competitors are left out.</p></div><div class="spacer"></div>${toggle}</div>
-      <div class="bd" style="overflow-x:auto">${shown.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<div class="note">Only partial runs in this window.</div>'}</div></div>
+      <div class="bd" style="overflow-x:auto">${shown.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<div class="note">Only partial runs in this window.</div>'}
+      <div class="sub" style="margin-top:12px">Answers = unbranded prompts × models asked. It can be a little lower on some runs because Google doesn't show an AI Overview for every search, and a search with no overview isn't counted either way.</div></div></div>
     ${changes}`;
 }
 function srcHost(u){ try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u;} }
