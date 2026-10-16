@@ -179,6 +179,18 @@
   .fav.ico.fail b{color:var(--muted)}
   .mark img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
   tr.me td{background:var(--accent-weak)}
+  tr.clk{cursor:pointer} tr.clk:hover td{background:var(--panel-2)} tr.open td{background:var(--accent-weak)}
+  .dlink{display:inline-flex;align-items:center;gap:5px;white-space:nowrap} .dlink svg{width:13px;height:13px;color:var(--faint)}
+  tr.open .dlink svg{transform:rotate(90deg)}
+  .dcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:16px;align-items:start}
+  .dgrp{border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+  .dhd{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .dchg{padding:9px 0;border-top:1px solid var(--border);cursor:pointer}
+  .dhd+.dchg{border-top:none} .dchg:hover .dpr{color:var(--accent)}
+  .dpr{font-size:13px;font-weight:600;line-height:1.35;margin-bottom:5px}
+  .dmods{display:flex;flex-wrap:wrap;gap:6px 14px}
+  .dmod{display:inline-flex;align-items:center;gap:7px;font-size:12px}
+  .dmod .modelbadge{font-size:12px} .dmove{color:var(--muted);white-space:nowrap}
   tr.me .brandcell{color:var(--accent)}
   .bar{height:6px;border-radius:4px;background:var(--panel-2);overflow:hidden;min-width:60px}
   .bar>i{display:block;height:100%;border-radius:4px;background:var(--accent)}
@@ -376,7 +388,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', anaPartial:false, answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', anaPartial:false, anaOpen:null, answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -1192,15 +1204,48 @@ function runStats(cid){
     const byModel={}; models.forEach(m=>{ const mr=rs.filter(r=>r.model===m);
       byModel[m]= mr.length? {n:mr.length, vis:Math.round(mr.filter(r=>r.client_mentioned).length/mr.length*100)} : null; });
     const promptsHit=new Set(rs.map(r=>r.prompt_text)).size;
-    return { date:d, n:rs.length, ment:ment.length, vis:Math.round(ment.length/rs.length*100),
+    return { date:d, rows:rs, n:rs.length, ment:ment.length, vis:Math.round(ment.length/rs.length*100),
       feat:ment.filter(r=>r.client_prominence==='featured').length,
       avgRank: ranks.length? ranks.reduce((a,b)=>a+b,0)/ranks.length : null,
       sc, byModel, promptsHit, partial: promptsHit/nPrompts < 0.6 };
   });
   // change vs the previous FULL run (older), in percentage points
   const full=runs.filter(r=>!r.partial);
-  full.forEach((r,i)=>{ const prev=full[i+1]; r.delta= prev? r.vis-prev.vis : null; });
+  full.forEach((r,i)=>{ const prev=full[i+1]; r.delta= prev? r.vis-prev.vis : null; r.diff= prev? runDiff(r,prev) : null; });
   return {runs, full, models, nPrompts};
+}
+// Prompt-level change between two runs, per prompt x model. Only pairs answered in BOTH
+// runs are compared (a model that wasn't asked, or an AI Overview Google didn't show, isn't a change).
+const PLEVEL=r=> !r.client_mentioned ? 0 : (r.client_prominence==='featured' ? 2 : 1);
+const PNAME=['Absent','Listed','Featured'];
+function runDiff(cur, prev){
+  const key=r=>r.model+'\u0001'+r.prompt_text;
+  const before={}; prev.rows.forEach(r=>{ before[key(r)]=r; });
+  const out={gained:[], lost:[], up:[], down:[]};
+  cur.rows.forEach(r=>{ const b=before[key(r)]; if(!b) return;
+    const was=PLEVEL(b), now=PLEVEL(r); if(was===now) return;
+    const item={prompt:r.prompt_text, model:r.model, was, now};
+    if(was===0) out.gained.push(item); else if(now===0) out.lost.push(item);
+    else if(now>was) out.up.push(item); else out.down.push(item); });
+  const order=Object.fromEntries(CANON_MODELS.map((m,i)=>[m,i]));
+  Object.values(out).forEach(l=>l.sort((a,b)=>a.prompt.localeCompare(b.prompt)||order[a.model]-order[b.model]));
+  out.prevDate=prev.date; return out;
+}
+window.toggleAnaRun=function(d){ state.anaOpen = state.anaOpen===d ? '' : d; render();
+  const el=document.getElementById('anaChanges'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
+function diffPanel(c, r){
+  const d=r.diff; if(!d) return `<div class="note">This is the first full run, so there is nothing to compare it to yet.</div>`;
+  const total=d.gained.length+d.lost.length+d.up.length+d.down.length;
+  if(!total) return `<div class="note">No prompt changed since ${esc(d.prevDate)}. Every prompt got the same result from every model.</div>`;
+  const line=(pr,xs)=>`<div class="dchg" onclick="openPrompt('${c.id}','${encodeURIComponent(pr)}')">
+      <div class="dpr">${esc(pr)}</div>
+      <div class="dmods">${xs.map(x=>{ const mb=MB(x.model);
+        return `<span class="dmod"><span class="modelbadge"><span class="m" style="background:${mb.c}">${mb.i}</span>${esc(mb.n.replace('Google AI Overviews','AI Overviews'))}</span><span class="dmove">${PNAME[x.was]} → <b>${PNAME[x.now]}</b></span></span>`; }).join('')}</div></div>`;
+  const group=(title,list,cls)=>{ if(!list.length) return '';
+    const byP={}; list.forEach(x=>{ (byP[x.prompt]=byP[x.prompt]||[]).push(x); });
+    const ps=Object.keys(byP);
+    return `<div class="dgrp"><div class="dhd"><span class="chip ${cls}">${title}</span><span class="sub">${ps.length} prompt${ps.length===1?'':'s'} · ${list.length} answer${list.length===1?'':'s'}</span></div>${ps.map(pr=>line(pr,byP[pr])).join('')}</div>`; };
+  return `<div class="dcols">${group('Now mentioned',d.gained,'pos')}${group('Moved up to Featured',d.up,'pos')}${group('Dropped out',d.lost,'neg')}${group('Moved down to Listed',d.down,'neu')}</div>`;
 }
 function runChart(full){
   const pts=full.slice().reverse();   // oldest -> newest
@@ -1233,8 +1278,13 @@ function analysisHTML(c){
   const dChip=d=> d==null? '<span class="sub">first</span>'
     : `<span class="chip ${d>0?'pos':d<0?'neg':'off'}">${d>0?'▲ +'+d+' pts':d<0?'▼ '+Math.abs(d)+' pts':'no change'}</span>`;
   const sentTxt=sc=>{ const t=sc.positive+sc.neutral+sc.negative; return t? `${sentLabelOf(sc)} <span class="sub">${sc.positive}/${sc.neutral}/${sc.negative}</span>` : '<span class="sub">n/a</span>'; };
-  const head=`<tr><th>Run date</th><th>Answers</th><th>AI visibility</th><th>Mentioned</th><th>Featured</th><th>Avg position</th>${models.map(m=>`<th>${esc(MB(m).n.replace('Google AI Overviews','AI Overviews'))}</th>`).join('')}<th title="positive / neutral / negative">Sentiment when found</th><th>vs previous run</th></tr>`;
-  const body=shown.map(r=>`<tr style="${r.partial?'opacity:.55':''}">
+  const head=`<tr><th>Run date</th><th>Answers</th><th>AI visibility</th><th>Mentioned</th><th>Featured</th><th>Avg position</th>${models.map(m=>`<th>${esc(MB(m).n.replace('Google AI Overviews','AI Overviews'))}</th>`).join('')}<th title="positive / neutral / negative">Sentiment when found</th><th>vs previous run</th><th>Prompts changed</th></tr>`;
+  if(state.anaOpen===null && full[0]) state.anaOpen=full[0].date;   // latest run open by default
+  const chg=r=>{ const d=r.diff; if(r.partial||!d) return '<span class="sub">n/a</span>';
+    const up=d.gained.length+d.up.length, dn=d.lost.length+d.down.length;
+    return `<span class="dlink">${up?`<span class="chip pos">▲ ${up}</span>`:''}${dn?`<span class="chip neg">▼ ${dn}</span>`:''}${!up&&!dn?'<span class="sub">none</span>':''}${chev()}</span>`; };
+  const body=shown.map(r=>{ const open=!r.partial && state.anaOpen===r.date;
+    return `<tr class="${r.partial?'':'clk'} ${open?'open':''}" style="${r.partial?'opacity:.55':''}" ${r.partial?'':`onclick="toggleAnaRun('${r.date}')"`}>
       <td class="tnum" style="font-weight:650;white-space:nowrap">${esc(r.date)}${r.partial?' <span class="chip off" title="Answered '+r.promptsHit+' of the unbranded prompts">Partial</span>':''}</td>
       <td class="tnum">${r.n}</td>
       <td class="tnum" style="font-weight:700;font-size:14px">${r.vis}%</td>
@@ -1243,7 +1293,10 @@ function analysisHTML(c){
       <td class="tnum">${r.avgRank!=null?'#'+r.avgRank.toFixed(1):'<span class="sub">n/a</span>'}</td>
       ${models.map(m=>{ const v=r.byModel[m]; return `<td class="tnum">${v?v.vis+'%':'<span class="sub">n/a</span>'}</td>`; }).join('')}
       <td style="white-space:nowrap">${sentTxt(r.sc)}</td>
-      <td>${r.partial?'<span class="sub">n/a</span>':dChip(r.delta)}</td></tr>`).join('');
+      <td>${r.partial?'<span class="sub">n/a</span>':dChip(r.delta)}</td>
+      <td>${chg(r)}</td></tr>`; }).join('');
+  const sel=full.find(r=>r.date===state.anaOpen);
+  const changes = sel ? `<div class="card" id="anaChanges" style="margin-top:16px"><div class="hd"><div><h3>What changed in the ${esc(sel.date)} run</h3><p>${sel.diff?`Compared with ${esc(sel.diff.prevDate)}, same prompt and same model. Click a prompt to read the answers.`:'First full run'}</p></div></div><div class="bd">${diffPanel(c,sel)}</div></div>` : '';
   const sinceStart = latest && first && latest!==first ? latest.vis-first.vis : null;
   const tiles = latest ? `<div class="tiles">
     ${tile('Latest run', latest.vis+'%', `${latest.ment} of ${latest.n} unbranded answers · ${latest.date}`, 'var(--accent)')}
@@ -1256,8 +1309,9 @@ function analysisHTML(c){
   return `<div class="eyebrow" style="margin-bottom:12px">Run by run · unbranded prompts only · ${esc(scope)} · ${winText()}</div>
     ${tiles}
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>AI visibility per run</h3><p>Share of unbranded answers that name ${esc(c.name)}, one point per full run</p></div></div><div class="bd">${chart}</div></div>
-    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every run</h3><p>Newest first. Branded prompts and competitors are left out.</p></div><div class="spacer"></div>${toggle}</div>
-      <div class="bd" style="overflow-x:auto">${shown.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<div class="note">Only partial runs in this window.</div>'}</div></div>`;
+    <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every run</h3><p>Newest first. Click a run to see which prompts changed. Branded prompts and competitors are left out.</p></div><div class="spacer"></div>${toggle}</div>
+      <div class="bd" style="overflow-x:auto">${shown.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<div class="note">Only partial runs in this window.</div>'}</div></div>
+    ${changes}`;
 }
 function srcHost(u){ try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u;} }
 // Per-URL: how many answers used it (Used), avg times cited per answer (Avg),
@@ -1874,7 +1928,7 @@ function winText(){ return state.windowDays>=3650 ? 'all time' : 'last '+state.w
 window.setWindow=function(d){ state.windowDays=d; render(); };
 window.setModel=function(m){ state.modelFilter=m; render(); };
 window.go=function(v){ if(isClient()) return; state.selPrompts.clear(); state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
-window.openClient=function(id){ if(isClient()) return; state.selPrompts.clear(); state.view='client'; state.clientId=id; state.tab='overview'; render(); };
+window.openClient=function(id){ if(isClient()) return; state.selPrompts.clear(); state.anaOpen=null; state.view='client'; state.clientId=id; state.tab='overview'; render(); };
 window.setTab=function(t){ state.selPrompts.clear(); state.view='client'; state.tab=t; render(); };
 function render(){ renderNav();
   if(isClient() && state.view!=='prompt') state.view='client';
