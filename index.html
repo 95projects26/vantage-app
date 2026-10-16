@@ -1228,7 +1228,7 @@ function analysisHTML(c){
   const latest=full[0], first=full[full.length-1];
   const scope=state.modelFilter==='all'?'all models':MB(state.modelFilter).n;
   const dChip=d=> d==null? '<span class="sub">first</span>'
-    : `<span class="chip ${d>0?'pos':d<0?'neg':'off'}">${d>0?'▲ +':d<0?'▼ ':''}${d===0?'no change':d+' pts'}</span>`;
+    : `<span class="chip ${d>0?'pos':d<0?'neg':'off'}">${d>0?'▲ +'+d+' pts':d<0?'▼ '+Math.abs(d)+' pts':'no change'}</span>`;
   const sentTxt=sc=>{ const t=sc.positive+sc.neutral+sc.negative; return t? `${sentLabelOf(sc)} <span class="sub">${sc.positive}/${sc.neutral}/${sc.negative}</span>` : '<span class="sub">n/a</span>'; };
   const head=`<tr><th>Run date</th><th>Answers</th><th>AI visibility</th><th>Mentioned</th><th>Featured</th><th>Avg position</th>${models.map(m=>`<th>${esc(MB(m).n.replace('Google AI Overviews','AI Overviews'))}</th>`).join('')}<th title="positive / neutral / negative">Sentiment when found</th><th>vs previous run</th></tr>`;
   const body=shown.map(r=>`<tr style="${r.partial?'opacity:.55':''}">
