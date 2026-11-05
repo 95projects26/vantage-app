@@ -94,6 +94,31 @@
   .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:2px}
   .seg button{border:none;background:none;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px}
   .seg button.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
+  .rng{position:relative}
+  .rngbtn{display:flex;align-items:center;gap:9px;font-family:inherit;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:5px 11px;cursor:pointer;text-align:left}
+  .rngbtn:hover{border-color:var(--accent-line)}
+  .rngbtn svg{width:16px;height:16px;color:var(--muted);flex:none}
+  .rngtxt{display:flex;flex-direction:column;line-height:1.25}
+  .rngtxt b{font-size:12.5px;font-weight:600}
+  .rngtxt span{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+  .rngpanel{position:absolute;top:calc(100% + 6px);right:0;z-index:30;width:min(490px,calc(100vw - 32px));display:grid;grid-template-columns:150px 1fr;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 34px rgba(8,12,20,.2);overflow:hidden}
+  .rnglist{display:flex;flex-direction:column;padding:6px;border-right:1px solid var(--border);background:var(--panel-2)}
+  .rnglist button{font-family:inherit;font-size:12.5px;font-weight:500;color:var(--muted);background:none;border:none;border-radius:7px;padding:7px 9px;text-align:left;cursor:pointer}
+  .rnglist button:hover{color:var(--text);background:var(--panel)}
+  .rnglist button.on{color:var(--accent);background:var(--accent-weak);font-weight:650}
+  .rngmain{padding:14px;min-width:0}
+  .rnglab{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:7px}
+  .rngdates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .seg + .rngdates,.seg + .rngnote{margin-top:9px}
+  .rngfld{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);min-width:0}
+  .rngfld input{font-family:inherit;font-size:12.5px;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 7px;width:100%;min-width:0;box-sizing:border-box;color-scheme:light dark}
+  .rngnote{font-size:11.5px;color:var(--faint);line-height:1.45;margin-top:12px}
+  .rngerr{font-size:12px;color:var(--neg);margin-top:8px}
+  .rngerr:empty{display:none}
+  .rngfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  .rngbtn:focus-visible,.rnglist button:focus-visible,.rngfld input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  @media(max-width:560px){.rngpanel{position:fixed;left:16px;right:16px;top:70px;width:auto;grid-template-columns:1fr;max-height:calc(100vh - 90px);overflow:auto}.rnglist{display:grid;grid-template-columns:1fr 1fr;border-right:none;border-bottom:1px solid var(--border)}}
+  .tcmp{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:9px;font-size:11.5px;color:var(--faint)}
   .fsel{font-family:inherit;font-size:12.5px;font-weight:500;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:7px 9px;cursor:pointer}
   .catchip{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
   /* kanban */
@@ -388,7 +413,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PALETTE = ['#4E5FE0','#17A79A','#D79A3C','#D2698C','#6E7A93','#3B7D5B','#8A5AD1','#C0562E'];
-const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', anaPartial:false, anaOpen:null, answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', windowDays:7, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
+const state = { clients:[], prompts:[], results:[], actions:[], suggestions:[], perception:[], srcMentions:{}, runHealth:[], serviceStatus:[], providerCost:[], selPrompts:new Set(), ansFilter:'all', tagFilter:'all', clientFilter:'all', perfSort:'default', perfType:'all', anaPartial:false, anaOpen:null, answersLoaded:new Set(), role:'team', view:'clients', clientId:null, tab:'overview', running:false, promptText:'', range:{preset:'7d'}, compare:{mode:'none'}, rangeOpen:false, rangeDraft:null, modelFilter:'all', genRunning:false, insightsRunning:false, openActionId:null, userEmail:'' };
 const clientSuggestions = cid => (state.suggestions||[]).filter(s=>s.client_id===cid);
 const clientPerception = cid => (state.perception||[]).find(p=>p.client_id===cid);
 const CANON_MODELS = ['openai','anthropic','perplexity','gemini','aio'];
@@ -606,8 +631,41 @@ function latestRows(cid){
 function maxDate(cid){ const rs=viewResults(cid); return rs.length? rs.reduce((m,r)=>r.run_date>m?r.run_date:m, rs[0].run_date):null; }
 function shiftDate(iso, deltaDays){ const [y,mo,d]=iso.split('-').map(Number);
   const dt=new Date(Date.UTC(y,mo-1,d)); dt.setUTCDate(dt.getUTCDate()+deltaDays); return dt.toISOString().slice(0,10); }
-function windowRows(cid, days){ const md=maxDate(cid); if(!md) return [];
-  const start=shiftDate(md, -(days-1)); return viewResults(cid).filter(r=>r.run_date>=start && r.run_date<=md); }
+// ---------- DATE RANGE ----------
+// "Last N days" counts back from the latest run, so a client on a weekly schedule never
+// shows an empty week. Month, quarter and year to date follow the calendar, like GA4.
+const RANGE_PRESETS=[['7d','Last 7 days'],['14d','Last 14 days'],['30d','Last 30 days'],['90d','Last 90 days'],['mtd','Month to date'],['lastmonth','Last month'],['qtd','Quarter to date'],['ytd','Year to date'],['all','All time']];
+const pad2=n=>String(n).padStart(2,'0');
+const localToday=()=>{ const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
+function rangeOf(rs, preset=state.range.preset){
+  const dates=rs.map(r=>r.run_date), t=localToday(), monthStart=t.slice(0,8)+'01';
+  const hi=dates.length? dates.reduce((m,d)=>d>m?d:m) : t, lo=dates.length? dates.reduce((m,d)=>d<m?d:m) : t;
+  const label=(RANGE_PRESETS.find(x=>x[0]===preset)||[0,'Custom'])[1];
+  let start, end=t;
+  if(/^\d+d$/.test(preset)){ end=hi; start=shiftDate(hi,-(parseInt(preset)-1)); }
+  else if(preset==='mtd') start=monthStart;
+  else if(preset==='lastmonth'){ end=shiftDate(monthStart,-1); start=end.slice(0,8)+'01'; }
+  else if(preset==='qtd') start=`${t.slice(0,4)}-${pad2(3*Math.floor((+t.slice(5,7)-1)/3)+1)}-01`;
+  else if(preset==='ytd') start=t.slice(0,4)+'-01-01';
+  else if(preset==='all'){ start=lo; end=hi; }
+  else { start=state.range.start; end=state.range.end; }
+  return {preset,label,start,end};
+}
+const activeRange=cid=>rangeOf(viewResults(cid));
+const rowsIn=(rs,rng)=>rs.filter(r=>r.run_date>=rng.start && r.run_date<=rng.end);
+// the same number of days immediately before the range (GA4's "previous period")
+function previousOf(rng){ if(rng.preset==='all') return null;
+  const n=Math.round((Date.parse(rng.end)-Date.parse(rng.start))/86400000)+1;
+  const end=shiftDate(rng.start,-1); return {preset:'previous',label:'Previous period',start:shiftDate(end,-(n-1)),end}; }
+function compareRange(rng){ const m=state.compare.mode;
+  if(m==='previous') return previousOf(rng);
+  if(m==='custom') return {preset:'custom',label:'Custom',start:state.compare.start,end:state.compare.end};
+  return null; }
+function fmtRange(a,b){ const f=(iso,yr)=>{ const [y,m,d]=iso.split('-').map(Number);
+    return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]} ${d}${yr?', '+y:''}`; };
+  if(a===b) return f(a,true);
+  return `${f(a,a.slice(0,4)!==b.slice(0,4))} to ${f(b,true)}`; }
+function windowRows(cid){ const rs=viewResults(cid); return rs.length? rowsIn(rs,rangeOf(rs)) : []; }
 function promptKind(cid, text){
   const p=clientPrompts(cid).find(x=>x.text===text);
   if(p) return p.kind;
@@ -629,9 +687,8 @@ function sentLabelOf(sc){
   if(sc.negative>sc.positive) return 'Negative';
   return 'Neutral';
 }
-function summary(cid){
-  const W=state.windowDays;
-  const rows=windowRows(cid,W);   // rolling window (7/14/30 days)
+function summary(cid, rng=activeRange(cid)){
+  const rows=rowsIn(viewResults(cid),rng);
   const client=state.clients.find(c=>c.id===cid);
   // VISIBILITY / MENTIONS use UNBRANDED (buyer-intent) prompts only. Branded prompts
   // ("is X good?") almost always name the client, so counting them inflates the number.
@@ -648,21 +705,24 @@ function summary(cid){
   const tally=list=>{ const sc={positive:0,neutral:0,negative:0}; list.forEach(r=>{ if(r.sentiment&&sc[r.sentiment]!=null) sc[r.sentiment]++; }); return sc; };
   const bsc=tally(branded);
   const usc=tally(unb.filter(r=>r.client_mentioned));
-  // trend: unbranded visibility this window vs the prior window of equal length
-  const md=maxDate(cid);
-  let prevVis=null;
-  if(md){
-    const ps=shiftDate(md,-(2*W-1)), pe=shiftDate(md,-W);
-    const pu=viewResults(cid).filter(r=>r.run_date>=ps && r.run_date<=pe && promptKind(cid,r.prompt_text)!=='branded');
-    prevVis = pu.length? Math.round(pu.filter(r=>r.client_mentioned).length/pu.length*100):null;
-  }
+  // trend: unbranded visibility this range vs the period of equal length just before it
+  const prior=previousOf(rng);
+  const pu=prior? rowsIn(viewResults(cid),prior).filter(r=>promptKind(cid,r.prompt_text)!=='branded') : [];
+  const prevVis = pu.length? Math.round(pu.filter(r=>r.client_mentioned).length/pu.length*100):null;
+  const ment=unb.filter(r=>r.client_mentioned);
+  const ranks=ment.map(r=>r.client_rank).filter(x=>x!=null&&x>0);
+  const byModel={}, modelN={}; CANON_MODELS.forEach(m=>{ const mr=unb.filter(r=>r.model===m);
+    if(mr.length){ modelN[m]=mr.length; byModel[m]=Math.round(mr.filter(r=>r.client_mentioned).length/mr.length*100); } });
   const dayCount=new Set(rows.map(r=>r.run_date)).size;
   return {
     unbTotal: unb.length, unbMent, vis: unb.length?Math.round(unbMent/unb.length*100):0,
     board, denom, rank, totalBrands,
     bsc, bSentLabel: sentLabelOf(bsc), brandedCount: branded.length,
     usc, uSentLabel: sentLabelOf(usc),
-    promptCount: clientPrompts(cid).length, dayCount, windowEnd: md, prevVis,
+    promptCount: clientPrompts(cid).length, dayCount, prevVis, byModel, modelN,
+    feat: ment.filter(r=>r.client_prominence==='featured').length,
+    avgRank: ranks.length? ranks.reduce((a,b)=>a+b,0)/ranks.length : null,
+    promptSet: new Set(unb.map(r=>r.prompt_text)),
   };
 }
 
@@ -716,7 +776,7 @@ function renderClients(){
   const shown=state.clients.filter(c=>{ const f=state.clientFilter;
     return f==='all'? !isArch(c) : f==='archived'? isArch(c) : f==='pitch'? isPitch(c) : c.status==='client'; });
   const cards = shown.map(c=>{
-    const s=summary(c.id); const cost=clientLatestCost(c.id);
+    const s=summary(c.id, rangeOf(viewResults(c.id),'7d')); const cost=clientLatestCost(c.id);
     const tagc = isArch(c)?'var(--neu)':isPitch(c)?'var(--faint)':'var(--pos)';
     return `<button class="ccard" onclick="openClient('${c.id}')">
       <div class="row1">${clientAvatar(c)}
@@ -921,28 +981,34 @@ function renderClient(){
   else if(state.tab==='actions') body=actionsTabHTML(c);
   else if(state.tab==='competitors') body=competitorsHTML(c);
   else if(state.tab==='sources') body=sourcesHTML(c);
+  if(['overview','analysis','answers','competitors','sources'].includes(state.tab) && viewResults(c.id).length && !windowRows(c.id).length) body=noRunsInRange(c);
   const banner = state.running ? `<div class="runbanner"><span class="mini-spin"></span>Running a fresh check across ChatGPT + Claude. This takes about 2 to 3 minutes; results update here automatically.</div>` : '';
   $('content').innerHTML = tabbar + `<div style="padding-top:18px">${banner}${body}</div>`;
 }
 
 function overviewHTML(c){
-  const rows=latestRows(c.id);
-  if(!rows.length) return emptyClient();
-  const s=summary(c.id);
-  const visSub = s.prevVis!=null
-    ? `${s.unbMent} of ${s.unbTotal} unbranded answers · ${s.vis>=s.prevVis?'▲':'▼'} from ${s.prevVis}% prior ${state.windowDays}d`
-    : `${s.unbMent} of ${s.unbTotal} unbranded answers · ${winText()}`;
+  if(!latestRows(c.id).length) return emptyClient();
+  const inRange=windowRows(c.id), lastDate=inRange.reduce((m,r)=>r.run_date>m?r.run_date:m, '');
+  if(!inRange.length) return noRunsInRange(c);
+  const rows=inRange.filter(r=>r.run_date===lastDate);
+  const s=summary(c.id), cr=compareRange(activeRange(c.id)), cs=cr?summary(c.id,cr):null;
+  const hasCmp=!!(cs&&cs.unbTotal);
+  const visSub = !cr && s.prevVis!=null
+    ? `${s.unbMent} of ${s.unbTotal} unbranded answers · ${s.vis===s.prevVis?'same as':(s.vis>s.prevVis?'▲':'▼')+' from'} ${s.prevVis}% in the previous period`
+    : `${s.unbMent} of ${s.unbTotal} unbranded answers`;
   const sovSub = s.rank ? `of ${s.totalBrands} brands on unbranded prompts`
     : (s.totalBrands ? `not named · ${s.totalBrands} rivals seen` : 'no unbranded data');
   const uTot=s.usc.positive+s.usc.neutral+s.usc.negative;
   const repSub = s.brandedCount ? `${s.bsc.positive} pos · ${s.bsc.neutral} neu · ${s.bsc.negative} neg` : 'no branded prompts';
   const uSentSub = uTot ? `${s.usc.positive} pos · ${s.usc.neutral} neu · ${s.usc.negative} neg` : 'no unbranded mentions yet';
-  const tiles = `<div class="eyebrow" style="margin-bottom:11px">${state.windowDays>=3650?'All-time':'Rolling '+state.windowDays+'-day'} window · visibility + share of voice on unbranded prompts only · through ${esc(s.windowEnd||'')}</div><div class="tiles">
-    ${tile('AI Visibility', s.unbTotal? s.vis+'%':'—', visSub, s.unbTotal&&s.vis<40?'var(--neg)':'var(--accent)', s.unbTotal&&s.vis<40?'var(--neg)':null)}
-    ${tile('Share of voice', s.rank?('#'+s.rank):'—', sovSub, 'var(--s2)')}
-    ${tile('Branded reputation', s.brandedCount? s.bSentLabel:'—', repSub, 'var(--neu)', null, 22)}
-    ${tile('Sentiment when found', uTot? s.uSentLabel:'—', uSentSub, 'var(--pos)', null, 22)}
-  </div>`;
+  const sentWas=(lab,sc)=> sc.positive+sc.neutral+sc.negative ? `was ${lab}, ${sc.positive} pos · ${sc.neutral} neu · ${sc.negative} neg` : 'no data in comparison';
+  const noCmp=hasCmp?null:'<span>no runs in comparison</span>';
+  const tiles = `<div class="eyebrow" style="margin-bottom:11px">${esc(winText())}${cr?` · compared with ${esc(fmtRange(cr.start,cr.end))}`:''} · visibility + share of voice on unbranded prompts only</div><div class="tiles">
+    ${tile('AI Visibility', s.unbTotal? s.vis+'%':'—', visSub, s.unbTotal&&s.vis<40?'var(--neg)':'var(--accent)', s.unbTotal&&s.vis<40?'var(--neg)':null, null, cr&&(noCmp||`${changeChip(s.vis-cs.vis)}<span>vs ${cs.vis}%</span>`))}
+    ${tile('Share of voice', s.rank?('#'+s.rank):'—', sovSub, 'var(--s2)', null, null, cr&&(noCmp||rankChange(s.rank,cs.rank)))}
+    ${tile('Branded reputation', s.brandedCount? s.bSentLabel:'—', repSub, 'var(--neu)', null, 22, cr&&(noCmp||`<span>${esc(sentWas(cs.bSentLabel,cs.bsc))}</span>`))}
+    ${tile('Sentiment when found', uTot? s.uSentLabel:'—', uSentSub, 'var(--pos)', null, 22, cr&&(noCmp||`<span>${esc(sentWas(cs.uSentLabel,cs.usc))}</span>`))}
+  </div>${compareCard(c)}`;
   // share of voice table
   const board=s.board.slice(0,7);
   const sov = board.length? `<table><tbody>${board.map((b,i)=>{
@@ -965,7 +1031,7 @@ function overviewHTML(c){
       <span class="viewcue">Read full answer${chev()}</span></div>`;
   }).join('');
   // source URLs (the actionable ones), over the active window
-  const urls=aggUrlRows(windowRows(c.id, state.windowDays));
+  const urls=aggUrlRows(windowRows(c.id));
   const srcHTML = urls.length? urls.slice(0,8).map(s=>urlRowHTML(s, c.id)).join('') : `<div class="note">No source URLs captured yet.</div>`;
   const sheetBtn = isClient() ? '' : `<a href="${PITCH_SHEET_URL}" target="_blank" rel="noopener" class="card" style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px 18px;text-decoration:none;color:inherit;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 5%,var(--panel))">
       <span style="width:34px;height:34px;border-radius:9px;background:var(--accent-weak);color:var(--accent);display:grid;place-items:center">${linkIcon()}</span>
@@ -973,7 +1039,7 @@ function overviewHTML(c){
       <span class="btn" style="pointer-events:none">Open sheet ${extIcon()}</span></a>`;
   return sheetBtn + (c.status==='pitch'?pitchSummaryCard(c,s):'') + tiles +
     `<div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
-      <div class="card"><div class="hd" style="flex-wrap:wrap;gap:10px"><div><h3>Prompt performance</h3><p>Best result per model, over the selected window</p></div><div class="spacer"></div>${perfControls()}</div><div class="bd" style="overflow-x:auto">${perf}</div></div>
+      <div class="card"><div class="hd" style="flex-wrap:wrap;gap:10px"><div><h3>Prompt performance</h3><p>Best result per model, over the selected dates</p></div><div class="spacer"></div>${perfControls()}</div><div class="bd" style="overflow-x:auto">${perf}</div></div>
       <div class="card"><div class="hd"><div><h3>Share of voice</h3><p>Unbranded buyer prompts</p></div></div><div class="bd">${sov}</div></div>
     </div>
     <div class="grid two" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
@@ -981,14 +1047,56 @@ function overviewHTML(c){
       <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — get featured here</p></div><div class="spacer"></div><button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="setTab('sources')">View all ${chev()}</button></div><div class="bd">${srcHTML}</div></div>
     </div>`;
 }
-function tile(lab,val,sub,strip,valColor,fs){
+function tile(lab,val,sub,strip,valColor,fs,cmp){
   return `<div class="tile"><span class="strip" style="background:${strip}"></span>
-    <div class="lab">${lab}</div><div class="val tnum" style="${valColor?'color:'+valColor+';':''}${fs?'font-size:'+fs+'px;margin-top:12px':''}">${esc(val)}</div><div class="sub">${esc(sub)}</div></div>`;
+    <div class="lab">${lab}</div><div class="val tnum" style="${valColor?'color:'+valColor+';':''}${fs?'font-size:'+fs+'px;margin-top:12px':''}">${esc(val)}</div><div class="sub">${esc(sub)}</div>${cmp?`<div class="tcmp">${cmp}</div>`:''}</div>`;
+}
+const changeChip=(d,unit=Math.abs(d)===1?' pt':' pts')=>`<span class="chip ${d>0?'pos':d<0?'neg':'off'}">${d>0?'▲ +'+d+unit:d<0?'▼ '+Math.abs(d)+unit:'no change'}</span>`;
+// share-of-voice rank: a lower number is better
+function rankChange(now,was){
+  if(now&&was){ const d=was-now, n=Math.abs(d);
+    return `<span class="chip ${d>0?'pos':d<0?'neg':'off'}">${d?(d>0?'▲ ':'▼ ')+n+' place'+(n===1?'':'s'):'no change'}</span><span>vs #${was}</span>`; }
+  if(now) return '<span class="chip pos">newly named</span>';
+  if(was) return `<span class="chip neg">dropped out</span><span>was #${was}</span>`;
+  return '';
+}
+function noRunsInRange(c){ const rs=viewResults(c.id), rng=activeRange(c.id), last=rs.reduce((m,r)=>r.run_date>m?r.run_date:m,'');
+  return `<div class="note" style="max-width:560px;display:block">No runs from ${esc(fmtRange(rng.start,rng.end))}. The latest run was ${esc(fmtRange(last,last))}.
+    <div style="margin-top:10px"><button class="btn ghost" onclick="rngPreset('all')">Show all time</button></div></div>`;
+}
+// GA4-style side-by-side of the selected dates and the comparison dates
+function compareCard(c){
+  const rng=activeRange(c.id), cr=compareRange(rng); if(!cr) return '';
+  const a=summary(c.id,rng), b=summary(c.id,cr);
+  const hd=`<div class="hd"><div><h3>Period comparison</h3><p>Unbranded prompts only. ${esc(state.modelFilter==='all'?'All models':MB(state.modelFilter).n)}.</p></div></div>`;
+  if(!b.unbTotal) return `<div class="card" style="margin-top:16px">${hd}<div class="bd"><div class="note">No runs from ${esc(fmtRange(cr.start,cr.end))}, so there's nothing to compare against. Pick a longer range or different comparison dates.</div></div></div>`;
+  const pct=(x,t)=>t?Math.round(x/t*100):0;
+  const row=(lab,av,bv,chg='')=>`<tr><td style="font-weight:600">${lab}</td><td class="tnum">${av}</td><td class="tnum">${bv}</td><td>${chg}</td></tr>`;
+  const na='<span class="sub">n/a</span>';
+  const sent=x=>{ const t=x.usc.positive+x.usc.neutral+x.usc.negative; return t?`${x.uSentLabel} <span class="sub">${x.usc.positive}/${x.usc.neutral}/${x.usc.negative}</span>`:na; };
+  const rd=a.avgRank!=null&&b.avgRank!=null? Math.round((b.avgRank-a.avgRank)*10)/10 : null;
+  const models=CANON_MODELS.filter(m=>a.byModel[m]!=null||b.byModel[m]!=null);
+  const body=[
+    row('AI visibility', a.vis+'%', b.vis+'%', changeChip(a.vis-b.vis)),
+    row('Mentioned', `${a.unbMent} of ${a.unbTotal}`, `${b.unbMent} of ${b.unbTotal}`),
+    row('Featured', `${pct(a.feat,a.unbTotal)}% <span class="sub">${a.feat}</span>`, `${pct(b.feat,b.unbTotal)}% <span class="sub">${b.feat}</span>`, changeChip(pct(a.feat,a.unbTotal)-pct(b.feat,b.unbTotal))),
+    row('Share of voice rank', a.rank?'#'+a.rank:na, b.rank?'#'+b.rank:na, rankChange(a.rank,b.rank).replace(/<span>.*?<\/span>/g,'')),
+    row('Avg position', a.avgRank!=null?'#'+a.avgRank.toFixed(1):na, b.avgRank!=null?'#'+b.avgRank.toFixed(1):na, rd==null?'':changeChip(rd,rd===1||rd===-1?' place':' places')),
+    row('Sentiment when found', sent(a), sent(b)),
+    row('Days with a run', a.dayCount, b.dayCount),
+    ...models.map(m=>row(esc(MB(m).n), a.byModel[m]!=null?`${a.byModel[m]}% <span class="sub">${a.modelN[m]} answers</span>`:na, b.byModel[m]!=null?`${b.byModel[m]}% <span class="sub">${b.modelN[m]} answers</span>`:na, a.byModel[m]!=null&&b.byModel[m]!=null?changeChip(a.byModel[m]-b.byModel[m]):'')),
+  ].join('');
+  const onlyA=[...a.promptSet].filter(t=>!b.promptSet.has(t)).length, onlyB=[...b.promptSet].filter(t=>!a.promptSet.has(t)).length;
+  // overall visibility is a blend of models, so an uneven mix can move it with no real change
+  const mixShift=models.some(m=>Math.abs((a.modelN[m]||0)/a.unbTotal-(b.modelN[m]||0)/b.unbTotal)>=0.1);
+  const warnNote=t=>`<div class="note" style="margin-top:12px">${infoIcon()}${t}</div>`;
+  const warn=(onlyA||onlyB? warnNote(`These periods didn't ask exactly the same questions: ${onlyA} prompt${onlyA===1?'':'s'} ran only in the selected dates and ${onlyB} only in the comparison.`) : '')
+    +(mixShift? warnNote(`The two periods have a different mix of models, which can move overall AI visibility on its own. The per-model rows are the fairer comparison.`) : '');
+  return `<div class="card" style="margin-top:16px">${hd}<div class="bd" style="overflow-x:auto"><table><thead><tr><th>Metric</th><th>${esc(fmtRange(rng.start,rng.end))}</th><th>${esc(fmtRange(cr.start,cr.end))}</th><th>Change</th></tr></thead><tbody>${body}</tbody></table>${warn}</div></div>`;
 }
 // Pitch snapshot: the TL;DR card shown at the top of a PITCH account's Overview for screen-shares.
 function pitchSummaryCard(c, s){
-  const W=state.windowDays;
-  const unb=windowRows(c.id,W).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
+  const unb=windowRows(c.id).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
   const nModels=new Set(unb.map(r=>r.model)).size;
   const rivals=s.board.filter(b=>b.n!==c.name).slice(0,5);
   const own=(c.name||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,6);
@@ -1031,7 +1139,7 @@ function perfControls(){
 window.setPerf=function(key,val){ state[key]=val; render(); };
 function promptPerfTable(c){
   const ps=clientPrompts(c.id);
-  const rows=windowRows(c.id, state.windowDays);
+  const rows=windowRows(c.id);
   const present=new Set(rows.map(r=>r.model));
   const models=CANON_MODELS.filter(m=>present.has(m));
   const head=`<thead><tr><th>Prompt</th><th>Type</th>${models.map(m=>`<th>${MB(m).n}</th>`).join('')}<th>Sentiment</th></tr></thead>`;
@@ -1167,7 +1275,7 @@ function lineChart(series, labels){
   return svg+`</svg>`;
 }
 function competitorsHTML(c){
-  const rows=windowRows(c.id, state.windowDays).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
+  const rows=windowRows(c.id).filter(r=>promptKind(c.id,r.prompt_text)!=='branded');
   if(!rows.length) return `<div class="note">No competitor data yet. It fills in from the brands the AIs name on your unbranded prompts.</div>`;
   const denom=rows.length;
   const board=Object.entries(brandTally(rows, c.name)).map(([n,x])=>({n,c:x,vis:Math.round(x/denom*100)})).sort((a,b)=>b.c-a.c);
@@ -1180,11 +1288,16 @@ function competitorsHTML(c){
   const series=top.map((b,i)=>({name:b.n, color: b.n===c.name?'var(--accent)':PALETTE[(i+1)%PALETTE.length], data:dates.map(d=>dayVis(b.n,d))}));
   const chart = dates.length>1 ? lineChart(series,dates) : `<div class="note">Need 2+ days of data for the trend, check back after the next run.</div>`;
   const legend = `<div class="legend" style="margin-top:12px">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`;
-  const table=`<table><thead><tr><th>#</th><th>Brand</th><th>Visibility</th><th>Share of voice</th></tr></thead><tbody>${board.slice(0,15).map((b,i)=>{ const mine=b.n===c.name;
+  const cr=compareRange(activeRange(c.id));
+  const cu=cr? rowsIn(viewResults(c.id),cr).filter(r=>promptKind(c.id,r.prompt_text)!=='branded') : [];
+  const ct=cu.length? brandTally(cu,c.name) : null;
+  const cmpTxt=cr? ` · ${ct?'change vs':'no runs in'} ${fmtRange(cr.start,cr.end)}` : '';
+  const table=`<table><thead><tr><th>#</th><th>Brand</th><th>Visibility</th>${ct?'<th>Change</th>':''}<th>Share of voice</th></tr></thead><tbody>${board.slice(0,15).map((b,i)=>{ const mine=b.n===c.name;
     return `<tr class="${mine?'me':''}"><td class="rank tnum">${i+1}</td><td><div class="brandcell">${mine?clientAvatar(c):brandChip(b.n)}${esc(b.n)}${mine?' <span class="chip pos" style="font-size:10px;padding:1px 7px">you</span>':''}</div></td>
       <td class="tnum" style="font-weight:600">${b.vis}%</td>
+      ${ct?`<td>${changeChip(b.vis-Math.round((ct[b.n]||0)/cu.length*100))}</td>`:''}
       <td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><div class="bar" style="max-width:120px"><i style="width:${b.vis}%;background:${mine?'var(--accent)':colorFor(b.n)}"></i></div><span class="tnum" style="font-size:12px">${b.vis}%</span></div></td></tr>`;}).join('')}</tbody></table>`;
-  return `<div class="eyebrow" style="margin-bottom:12px">You vs. competitors · unbranded prompts · ${winText()}</div>
+  return `<div class="eyebrow" style="margin-bottom:12px">You vs. competitors · unbranded prompts · ${esc(winText()+cmpTxt)}</div>
     <div class="card"><div class="hd"><div><h3>Visibility over time</h3><p>Share of AI answers naming each brand (${esc(c.name)} in blue)</p></div></div><div class="bd">${chart}${legend}</div></div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Ranking</h3><p>Every brand the models name on your prompts</p></div></div><div class="bd" style="overflow-x:auto">${table}</div></div>`;
 }
@@ -1193,7 +1306,7 @@ function competitorsHTML(c){
 // date that answered under 60% of the unbranded prompt set is flagged Partial: it's
 // listed (behind a toggle) but kept out of the trend line and the run-over-run change.
 function runStats(cid){
-  const unb=windowRows(cid, state.windowDays).filter(r=>promptKind(cid,r.prompt_text)!=='branded');
+  const unb=windowRows(cid).filter(r=>promptKind(cid,r.prompt_text)!=='branded');
   const nPrompts=clientPrompts(cid).filter(p=>p.kind!=='branded').length || 1;
   const models=CANON_MODELS.filter(m=>unb.some(r=>r.model===m));
   const g=groupBy(unb,'run_date');
@@ -1270,7 +1383,7 @@ function runChart(full){
 window.toggleAnaPartial=function(){ state.anaPartial=!state.anaPartial; render(); };
 function analysisHTML(c){
   const {runs, full, models} = runStats(c.id);
-  if(!runs.length) return `<div class="note">No unbranded results in this window yet. Try a longer window (All) or check back after the next run.</div>`;
+  if(!runs.length) return `<div class="note">No unbranded results in these dates yet. Try a longer date range or check back after the next run.</div>`;
   const nPartial=runs.length-full.length;
   const shown=state.anaPartial? runs : full;
   const latest=full[0], first=full[full.length-1];
@@ -1300,14 +1413,15 @@ function analysisHTML(c){
   const sinceStart = latest && first && latest!==first ? latest.vis-first.vis : null;
   const tiles = latest ? `<div class="tiles">
     ${tile('Latest run', latest.vis+'%', `${latest.ment} of ${latest.n} unbranded answers · ${latest.date}`, 'var(--accent)')}
-    ${tile('vs previous run', latest.delta==null?'n/a':(latest.delta>0?'+':'')+latest.delta+' pts', full[1]?`${full[1].vis}% on ${full[1].date}`:'only one full run so far', latest.delta>0?'var(--pos)':latest.delta<0?'var(--neg)':'var(--border)', latest.delta>0?'var(--pos)':latest.delta<0?'var(--neg)':null)}
+    ${tile('vs previous run', latest.delta==null?'n/a':(latest.delta>0?'+':'')+latest.delta+' pts', full[1]?`${full[1].vis}% on ${full[1].date}`:'only one full run in these dates', latest.delta>0?'var(--pos)':latest.delta<0?'var(--neg)':'var(--border)', latest.delta>0?'var(--pos)':latest.delta<0?'var(--neg)':null)}
     ${tile('Since first run', sinceStart==null?'n/a':(sinceStart>0?'+':'')+sinceStart+' pts', first?`${first.vis}% on ${first.date}`:'', sinceStart>0?'var(--pos)':sinceStart<0?'var(--neg)':'var(--border)', sinceStart>0?'var(--pos)':sinceStart<0?'var(--neg)':null)}
     ${tile('Featured, latest run', String(latest.feat), `of ${latest.ment} mentions named as a top pick`, 'var(--s2)')}
   </div>` : '';
-  const chart = full.length>1 ? runChart(full) : `<div class="note">The trend line starts after the second full run.</div>`;
+  const chart = full.length>1 ? runChart(full) : `<div class="note">The trend line needs two full runs in these dates. Try a longer date range.</div>`;
   const toggle = nPartial ? `<button class="btn ghost" style="padding:5px 11px;font-size:12px" onclick="toggleAnaPartial()">${state.anaPartial?'Hide':'Show'} ${nPartial} partial run${nPartial===1?'':'s'}</button>` : '';
-  return `<div class="eyebrow" style="margin-bottom:12px">Run by run · unbranded prompts only · ${esc(scope)} · ${winText()}</div>
+  return `<div class="eyebrow" style="margin-bottom:12px">Run by run · unbranded prompts only · ${esc(scope)} · ${esc(winText())}</div>
     ${tiles}
+    ${compareCard(c)}
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>AI visibility per run</h3><p>Share of unbranded answers that name ${esc(c.name)}, one point per full run</p></div></div><div class="bd">${chart}</div></div>
     <div class="card" style="margin-top:16px"><div class="hd"><div><h3>Every run</h3><p>Newest first. Click a run to see which prompts changed. Branded prompts and competitors are left out.</p></div><div class="spacer"></div>${toggle}</div>
       <div class="bd" style="overflow-x:auto">${shown.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<div class="note">Only partial runs in this window.</div>'}
@@ -1369,9 +1483,9 @@ function sourcesPanels(rows, scope, c){
     <div class="card"><div class="hd"><div><h3>Source URLs</h3><p>Exact pages models pull from — click one to see the answers it shaped</p></div></div><div class="bd" style="overflow-x:auto">${urlTableHTML(rows, c.name, c.id)}</div></div></div>`;
 }
 function sourcesHTML(c){
-  const rows=windowRows(c.id, state.windowDays);
+  const rows=windowRows(c.id);
   if(!rows.length) return `<div class="note">No citations captured yet.</div>`;
-  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · ${winText()}</div>`+sourcesPanels(rows,'across all prompts', c);
+  return `<div class="eyebrow" style="margin-bottom:12px">Across all prompts · ${esc(winText())}</div>`+sourcesPanels(rows,'across all prompts', c);
 }
 
 // ---------- DRAWER (prompt history over time) ----------
@@ -1429,7 +1543,7 @@ window.closeDrawer=()=>$('drawer').classList.add('hide');
 
 // full chronological feed of every answer
 function answersHTML(c){
-  const rows=viewResults(c.id);   // respects the active model filter
+  const rows=windowRows(c.id);   // respects the date range + model filter
   if(!rows.length) return emptyClient();
   const byDate=groupBy(rows,'run_date');
   const dates=Object.keys(byDate).sort().reverse();
@@ -1839,9 +1953,7 @@ window.genInsights=async function(cid){
 // (ignores the model filter on purpose — the scoreboard is a comparison).
 function modelStats(cid){
   const all=clientResults(cid); if(!all.length) return [];
-  const md=all.reduce((m,r)=>r.run_date>m?r.run_date:m, all[0].run_date);
-  const start=shiftDate(md,-(state.windowDays-1));
-  const win=all.filter(r=>r.run_date>=start && r.run_date<=md);
+  const win=rowsIn(all,rangeOf(all));
   return Object.entries(groupBy(win,'model')).map(([m,rs])=>{
     const unb=rs.filter(r=>promptKind(cid,r.prompt_text)!=='branded');  // visibility = unbranded
     const ment=unb.filter(r=>r.client_mentioned).length;
@@ -1877,7 +1989,7 @@ function perceptionHTML(c){
   const genBtn=isClient()?'':`<button class="btn ghost" onclick="genInsights('${c.id}')" ${state.insightsRunning?'disabled':''}>${state.insightsRunning?'<span class="mini-spin"></span>Working…':'Regenerate'}</button>`;
   const banner=state.insightsRunning?`<div class="runbanner"><span class="mini-spin"></span>Reading how each model describes this brand.</div>`:'';
   // sentiment over time (respects the model filter)
-  const rows=windowRows(c.id, state.windowDays).filter(r=>r.client_mentioned);
+  const rows=windowRows(c.id).filter(r=>r.client_mentioned);
   const dates=[...new Set(rows.map(r=>r.run_date))].sort();
   const score=d=>{ const dr=rows.filter(r=>r.run_date===d); if(!dr.length) return null; const map={positive:100,neutral:55,negative:5};
     const vals=dr.map(r=>map[r.sentiment]).filter(v=>v!=null); return vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null; };
@@ -1887,7 +1999,7 @@ function perceptionHTML(c){
   const sentCard=`<div class="card"><div class="hd"><div><h3>Sentiment over time</h3><p>How favorably the models talk about ${esc(c.name)} when mentioned</p></div></div><div class="bd">${chart||'<div class="note">Not enough mentions yet for a trend.</div>'}${distro}</div></div>`;
 
   const header=`<div style="display:flex;align-items:center;margin-bottom:14px"><div class="eyebrow">How AI perceives ${esc(c.name)}${p&&p.generated_at?' · updated '+fmtDate(p.generated_at):''}</div><div class="spacer"></div>${genBtn}</div>`;
-  const scoreboard = stats.length? `<div class="eyebrow" style="margin-bottom:9px">Which models surface you · ${winText()}</div>${modelScoreboard(stats)}` : '';
+  const scoreboard = stats.length? `<div class="eyebrow" style="margin-bottom:9px">Which models surface you · ${esc(winText())}</div>${modelScoreboard(stats)}` : '';
 
   // focused single-model view when a specific model is picked in the top filter
   const fm=state.modelFilter;
@@ -1922,11 +2034,54 @@ function filterControls(cid){
     CANON_MODELS.map(m=>{ const on=have.includes(m);
       const suffix = on ? '' : (LIVE_MODELS.includes(m) ? ' (no data yet)' : ' (no key)');
       return `<option value="${m}"${state.modelFilter===m?' selected':''}${on?'':' disabled'}>${MB(m).n}${suffix}</option>`;}).join('');
-  const seg=`<div class="seg">${[[7,'7d'],[14,'14d'],[30,'30d'],[90,'90d'],[3650,'All']].map(([d,l])=>`<button class="${state.windowDays===d?'on':''}" onclick="setWindow(${d})">${l}</button>`).join('')}</div>`;
-  return seg+`<select class="fsel" onchange="setModel(this.value)">${opts}</select>`;
+  return rangeControl(cid)+`<select class="fsel" onchange="setModel(this.value)">${opts}</select>`;
 }
-function winText(){ return state.windowDays>=3650 ? 'all time' : 'last '+state.windowDays+' days'; }
-window.setWindow=function(d){ state.windowDays=d; render(); };
+function winText(){ const r=activeRange(state.clientId); return `${r.label} (${fmtRange(r.start,r.end)})`; }
+function rangeControl(cid){
+  const rng=activeRange(cid), cr=compareRange(rng);
+  const icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+  return `<div class="rng"><button class="rngbtn" aria-haspopup="dialog" onclick="rngToggle()">${icon}<span class="rngtxt"><b>${esc(rng.label)}</b><span>${esc(fmtRange(rng.start,rng.end))}${cr?' · vs '+esc(fmtRange(cr.start,cr.end)):''}</span></span></button>${state.rangeOpen?rangePanel(cid):''}</div>`;
+}
+function rangePanel(cid){
+  const rng=activeRange(cid), d=state.rangeDraft, today=localToday();
+  const dateFld=(lab,key)=>`<label class="rngfld">${lab}<input type="date" max="${today}" value="${esc(d[key]||'')}" onchange="rngDraft('${key}',this.value)"></label>`;
+  const modeBtn=(m,l)=>`<button class="${d.cmode===m?'on':''}" onclick="rngMode('${m}')">${l}</button>`;
+  const prev=previousOf({...rng,start:d.start,end:d.end});
+  const cmpBody = d.cmode==='custom' ? `<div class="rngdates">${dateFld('Start','cstart')}${dateFld('End','cend')}</div>`
+    : d.cmode==='previous' ? `<div class="rngnote">${prev?esc(fmtRange(prev.start,prev.end)):'All time has no earlier period to compare with.'}</div>` : '';
+  return `<div class="rngpanel" role="dialog" aria-label="Date range">
+    <div class="rnglist">${RANGE_PRESETS.map(([k,l])=>`<button class="${rng.preset===k?'on':''}" onclick="rngPreset('${k}')">${l}</button>`).join('')}
+      <button class="${rng.preset==='custom'?'on':''}" onclick="document.querySelector('.rngpanel input').focus()">Custom</button></div>
+    <div class="rngmain">
+      <div class="rnglab">Date range</div><div class="rngdates">${dateFld('Start','start')}${dateFld('End','end')}</div>
+      <div class="rnglab" style="margin-top:14px">Compare to</div><div class="seg">${modeBtn('none','None')}${modeBtn('previous','Previous period')}${modeBtn('custom','Custom')}</div>${cmpBody}
+      <div class="rngnote">Last 7 to 90 days count back from the latest run. Month, quarter and year to date follow the calendar.</div>
+      <div class="rngerr" id="rngErr"></div>
+      <div class="rngfoot"><button class="btn ghost" onclick="closeRange()">Cancel</button><button class="btn" onclick="rngApply()">Apply</button></div>
+    </div></div>`;
+}
+const redrawRangePanel=()=>{ const w=document.querySelector('.rng'); if(!w) return; const p=w.querySelector('.rngpanel'); if(p) p.remove(); if(state.rangeOpen) w.insertAdjacentHTML('beforeend',rangePanel(state.clientId)); };
+function closeRange(){ state.rangeOpen=false; state.rangeDraft=null; redrawRangePanel(); }
+window.closeRange=closeRange;
+window.rngToggle=function(){ if(state.rangeOpen) return closeRange();
+  const rng=activeRange(state.clientId), cp=state.compare, prev=previousOf(rng);
+  state.rangeDraft={start:rng.start,end:rng.end,cmode:cp.mode,cstart:cp.start||(prev&&prev.start)||'',cend:cp.end||(prev&&prev.end)||''};
+  state.rangeOpen=true; redrawRangePanel(); };
+window.rngDraft=function(k,v){ state.rangeDraft[k]=v; };
+// None and Previous period take effect right away; Custom waits for its dates and Apply
+window.rngMode=function(m){ const d=state.rangeDraft; d.cmode=m;
+  if(m==='custom') return redrawRangePanel();
+  state.compare={mode:m}; state.anaOpen=null; const y=window.scrollY; render(); window.scrollTo(0,y); };
+window.rngPreset=function(k){ state.range={preset:k}; state.anaOpen=null;
+  const d=state.rangeDraft; if(d&&d.cmode==='custom'&&d.cstart&&d.cend&&d.cstart<=d.cend) state.compare={mode:'custom',start:d.cstart,end:d.cend};
+  state.rangeOpen=false; state.rangeDraft=null; const y=window.scrollY; render(); window.scrollTo(0,y); };
+window.rngApply=function(){ const d=state.rangeDraft, rng=activeRange(state.clientId), err=$('rngErr');
+  if(!d.start||!d.end||d.start>d.end){ err.textContent='Choose a start date on or before the end date.'; return; }
+  if(d.cmode==='custom'&&(!d.cstart||!d.cend||d.cstart>d.cend)){ err.textContent='Choose a comparison start date on or before its end date.'; return; }
+  if(d.start!==rng.start||d.end!==rng.end) state.range={preset:'custom',start:d.start,end:d.end};
+  state.compare= d.cmode==='custom'? {mode:'custom',start:d.cstart,end:d.cend} : {mode:d.cmode};
+  state.anaOpen=null; state.rangeOpen=false; state.rangeDraft=null; const y=window.scrollY; render(); window.scrollTo(0,y); };
+document.addEventListener('click',e=>{ if(state.rangeOpen && !e.target.closest('.rng')) closeRange(); },true);
 window.setModel=function(m){ state.modelFilter=m; render(); };
 window.go=function(v){ if(isClient()) return; state.selPrompts.clear(); state.view=v; if(v==='clients'){state.clientId=null; state.modelFilter='all';} render(); };
 window.openClient=function(id){ if(isClient()) return; state.selPrompts.clear(); state.anaOpen=null; state.view='client'; state.clientId=id; state.tab='overview'; render(); };
@@ -1943,7 +2098,7 @@ function renderPromptPage(){
   const c=state.clients.find(x=>x.id===state.clientId); if(!c) return go('clients');
   const text=state.promptText;
   // rows for this prompt within the active window + model filter, grouped by day
-  const wrows=windowRows(c.id, state.windowDays).filter(r=>r.prompt_text===text);
+  const wrows=windowRows(c.id).filter(r=>r.prompt_text===text);
   const hist=byDateDesc(wrows);
   $('topbar').innerHTML=`<div style="min-width:0"><div class="crumb"><a onclick="go('clients')">Clients</a> / <a onclick="openClient('${c.id}')">${esc(c.name)}</a> / <b>Prompt history</b></div><div class="h1">${esc(text)}</div></div>
     <div class="spacer"></div>
@@ -2008,7 +2163,7 @@ function pollRun(sinceIso, started){
   }, 8000);
 }
 
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'){closeDrawer();closeModal();} });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){closeDrawer();closeModal();if(state.rangeOpen)closeRange();} });
 
 // ---------- BOOT ----------
 async function boot(){
